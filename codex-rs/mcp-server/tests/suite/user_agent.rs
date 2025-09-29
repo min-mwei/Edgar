@@ -11,9 +11,9 @@ const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn get_user_agent_returns_current_codex_user_agent() {
-    let codex_home = TempDir::new().unwrap_or_else(|err| panic!("create tempdir: {err}"));
+    let edgar_home = TempDir::new().unwrap_or_else(|err| panic!("create tempdir: {err}"));
 
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())

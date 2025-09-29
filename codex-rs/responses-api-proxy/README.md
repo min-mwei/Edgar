@@ -9,7 +9,7 @@ A strict HTTP proxy that only forwards `POST` requests to `/v1/responses` to the
 A privileged user (i.e., `root` or a user with `sudo`) who has access to `OPENAI_API_KEY` would run the following to start the server:
 
 ```shell
-printenv OPENAI_API_KEY | CODEX_SECURE_MODE=1 codex responses-api-proxy --http-shutdown --server-info /tmp/server-info.json
+printenv OPENAI_API_KEY | CODEX_SECURE_MODE=1 edgar responses-api-proxy --http-shutdown --server-info /tmp/server-info.json
 ```
 
 A non-privileged user would then run Codex as follows, specifying the `model_provider` dynamically:
@@ -17,7 +17,7 @@ A non-privileged user would then run Codex as follows, specifying the `model_pro
 ```shell
 PROXY_PORT=$(jq .port /tmp/server-info.json)
 PROXY_BASE_URL="http://127.0.0.1:${PROXY_PORT}"
-codex exec -c "model_providers.openai-proxy={ name = 'OpenAI Proxy', base_url = '${PROXY_BASE_URL}/v1', wire_api='responses' }" \
+edgar exec -c "model_providers.openai-proxy={ name = 'OpenAI Proxy', base_url = '${PROXY_BASE_URL}/v1', wire_api='responses' }" \
     -c model_provider="openai-proxy" \
     'Your prompt here'
 ```
@@ -30,7 +30,7 @@ curl --fail --silent --show-error "${PROXY_BASE_URL}/shutdown"
 
 ## Behavior
 
-- Reads the API key from `stdin`. All callers should pipe the key in (for example, `printenv OPENAI_API_KEY | codex responses-api-proxy`).
+- Reads the API key from `stdin`. All callers should pipe the key in (for example, `printenv OPENAI_API_KEY | edgar responses-api-proxy`).
 - Formats the header value as `Bearer <key>` and attempts to `mlock(2)` the memory holding that header so it is not swapped to disk.
 - Listens on the provided port or an ephemeral port if `--port` is not specified.
 - Accepts exactly `POST /v1/responses` (no query string). The request body is forwarded to `https://api.openai.com/v1/responses` with `Authorization: Bearer <key>` set. All original request headers (except any incoming `Authorization`) are forwarded upstream. For other requests, it responds with `403`.

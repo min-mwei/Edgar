@@ -12,7 +12,7 @@ use codex_core::RolloutRecorder;
 use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
 use codex_core::config::ConfigToml;
-use codex_core::config::find_codex_home;
+use codex_core::config::find_edgar_home;
 use codex_core::config::load_config_as_toml_with_cli_overrides;
 use codex_core::find_conversation_path_by_id_str;
 use codex_core::protocol::AskForApproval;
@@ -168,15 +168,15 @@ pub async fn run_main(
     // we load config.toml here to determine project state.
     #[allow(clippy::print_stderr)]
     let config_toml = {
-        let codex_home = match find_codex_home() {
-            Ok(codex_home) => codex_home,
+        let edgar_home = match find_edgar_home() {
+            Ok(edgar_home) => edgar_home,
             Err(err) => {
                 eprintln!("Error finding codex home: {err}");
                 std::process::exit(1);
             }
         };
 
-        match load_config_as_toml_with_cli_overrides(&codex_home, cli_kv_overrides) {
+        match load_config_as_toml_with_cli_overrides(&edgar_home, cli_kv_overrides) {
             Ok(config_toml) => config_toml,
             Err(err) => {
                 eprintln!("Error loading config.toml: {err}");
@@ -334,7 +334,7 @@ async fn run_ratatui_app(
     // Initialize high-fidelity session event logging if enabled.
     session_log::maybe_init(&config);
 
-    let auth_manager = AuthManager::shared(config.codex_home.clone());
+    let auth_manager = AuthManager::shared(config.edgar_home.clone());
     let login_status = get_login_status(&config);
     let should_show_onboarding =
         should_show_onboarding(login_status, &config, should_show_trust_screen);
@@ -358,7 +358,7 @@ async fn run_ratatui_app(
 
     // Determine resume behavior: explicit id, then resume last, then picker.
     let resume_selection = if let Some(id_str) = cli.resume_session_id.as_deref() {
-        match find_conversation_path_by_id_str(&config.codex_home, id_str).await? {
+        match find_conversation_path_by_id_str(&config.edgar_home, id_str).await? {
             Some(path) => resume_picker::ResumeSelection::Resume(path),
             None => {
                 error!("Error finding conversation path: {id_str}");
@@ -366,7 +366,7 @@ async fn run_ratatui_app(
             }
         }
     } else if cli.resume_last {
-        match RolloutRecorder::list_conversations(&config.codex_home, 1, None).await {
+        match RolloutRecorder::list_conversations(&config.edgar_home, 1, None).await {
             Ok(page) => page
                 .items
                 .first()
@@ -375,7 +375,7 @@ async fn run_ratatui_app(
             Err(_) => resume_picker::ResumeSelection::StartFresh,
         }
     } else if cli.resume_picker {
-        match resume_picker::run_resume_picker(&mut tui, &config.codex_home).await? {
+        match resume_picker::run_resume_picker(&mut tui, &config.edgar_home).await? {
             resume_picker::ResumeSelection::Exit => {
                 restore();
                 session_log::log_session_end();
@@ -432,8 +432,8 @@ fn get_login_status(config: &Config) -> LoginStatus {
     if config.model_provider.requires_openai_auth {
         // Reading the OpenAI API key is an async operation because it may need
         // to refresh the token. Block on it.
-        let codex_home = config.codex_home.clone();
-        match CodexAuth::from_codex_home(&codex_home) {
+        let edgar_home = config.edgar_home.clone();
+        match CodexAuth::from_edgar_home(&edgar_home) {
             Ok(Some(auth)) => LoginStatus::AuthMode(auth.mode),
             Ok(None) => LoginStatus::NotAuthenticated,
             Err(err) => {

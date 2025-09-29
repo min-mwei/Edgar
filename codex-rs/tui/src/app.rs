@@ -318,7 +318,7 @@ impl App {
             }
             AppEvent::PersistModelSelection { model, effort } => {
                 let profile = self.active_profile.as_deref();
-                match persist_model_selection(&self.config.codex_home, profile, &model, effort)
+                match persist_model_selection(&self.config.edgar_home, profile, &model, effort)
                     .await
                 {
                     Ok(()) => {

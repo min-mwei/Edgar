@@ -76,7 +76,7 @@ pub(crate) fn compose_agents_summary(config: &Config) -> String {
 }
 
 pub(crate) fn compose_account_display(config: &Config) -> Option<StatusAccountDisplay> {
-    let auth_file = get_auth_file(&config.codex_home);
+    let auth_file = get_auth_file(&config.edgar_home);
     let auth = try_read_auth_json(&auth_file).ok()?;
 
     if let Some(tokens) = auth.tokens.as_ref() {

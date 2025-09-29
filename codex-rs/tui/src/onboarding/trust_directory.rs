@@ -21,7 +21,7 @@ use crate::onboarding::onboarding_screen::StepStateProvider;
 use super::onboarding_screen::StepState;
 
 pub(crate) struct TrustDirectoryWidget {
-    pub codex_home: PathBuf,
+    pub edgar_home: PathBuf,
     pub cwd: PathBuf,
     pub is_git_repo: bool,
     pub selection: Option<TrustDirectorySelection>,
@@ -140,7 +140,7 @@ impl TrustDirectoryWidget {
     fn handle_trust(&mut self) {
         let target =
             resolve_root_git_project_for_trust(&self.cwd).unwrap_or_else(|| self.cwd.clone());
-        if let Err(e) = set_project_trusted(&self.codex_home, &target) {
+        if let Err(e) = set_project_trusted(&self.edgar_home, &target) {
             tracing::error!("Failed to set project trusted: {e:?}");
             self.error = Some(format!("Failed to set trust for {}: {e}", target.display()));
         }

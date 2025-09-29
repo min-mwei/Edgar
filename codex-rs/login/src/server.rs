@@ -31,7 +31,7 @@ const DEFAULT_PORT: u16 = 1455;
 
 #[derive(Debug, Clone)]
 pub struct ServerOptions {
-    pub codex_home: PathBuf,
+    pub edgar_home: PathBuf,
     pub client_id: String,
     pub issuer: String,
     pub port: u16,
@@ -40,9 +40,9 @@ pub struct ServerOptions {
 }
 
 impl ServerOptions {
-    pub fn new(codex_home: PathBuf, client_id: String) -> Self {
+    pub fn new(edgar_home: PathBuf, client_id: String) -> Self {
         Self {
-            codex_home,
+            edgar_home,
             client_id,
             issuer: DEFAULT_ISSUER.to_string(),
             port: DEFAULT_PORT,
@@ -236,7 +236,7 @@ async fn process_request(
                         .await
                         .ok();
                     if let Err(err) = persist_tokens_async(
-                        &opts.codex_home,
+                        &opts.edgar_home,
                         api_key.clone(),
                         tokens.id_token.clone(),
                         tokens.access_token.clone(),
@@ -444,16 +444,16 @@ async fn exchange_code_for_tokens(
 }
 
 async fn persist_tokens_async(
-    codex_home: &Path,
+    edgar_home: &Path,
     api_key: Option<String>,
     id_token: String,
     access_token: String,
     refresh_token: String,
 ) -> io::Result<()> {
     // Reuse existing synchronous logic but run it off the async runtime.
-    let codex_home = codex_home.to_path_buf();
+    let edgar_home = edgar_home.to_path_buf();
     tokio::task::spawn_blocking(move || {
-        let auth_file = get_auth_file(&codex_home);
+        let auth_file = get_auth_file(&edgar_home);
         if let Some(parent) = auth_file.parent()
             && !parent.exists()
         {

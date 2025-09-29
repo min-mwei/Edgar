@@ -8,7 +8,7 @@ use anyhow::bail;
 use codex_common::CliConfigOverrides;
 use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
-use codex_core::config::find_codex_home;
+use codex_core::config::find_edgar_home;
 use codex_core::config::load_global_mcp_servers;
 use codex_core::config::write_global_mcp_servers;
 use codex_core::config_types::McpServerConfig;
@@ -20,7 +20,7 @@ use codex_core::config_types::McpServerTransportConfig;
 /// - `serve`  — run the MCP server on stdio
 /// - `list`   — list configured servers (with `--json`)
 /// - `get`    — show a single server (with `--json`)
-/// - `add`    — add a server launcher entry to `~/.codex/config.toml`
+/// - `add`    — add a server launcher entry to `~/.edgar/config.toml`
 /// - `remove` — delete a server entry
 #[derive(Debug, clap::Parser)]
 pub struct McpCli {
@@ -140,9 +140,9 @@ fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Result<(
         Some(map)
     };
 
-    let codex_home = find_codex_home().context("failed to resolve CODEX_HOME")?;
-    let mut servers = load_global_mcp_servers(&codex_home)
-        .with_context(|| format!("failed to load MCP servers from {}", codex_home.display()))?;
+    let edgar_home = find_edgar_home().context("failed to resolve CODEX_HOME")?;
+    let mut servers = load_global_mcp_servers(&edgar_home)
+        .with_context(|| format!("failed to load MCP servers from {}", edgar_home.display()))?;
 
     let new_entry = McpServerConfig {
         transport: McpServerTransportConfig::Stdio {
@@ -156,8 +156,8 @@ fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Result<(
 
     servers.insert(name.clone(), new_entry);
 
-    write_global_mcp_servers(&codex_home, &servers)
-        .with_context(|| format!("failed to write MCP servers to {}", codex_home.display()))?;
+    write_global_mcp_servers(&edgar_home, &servers)
+        .with_context(|| format!("failed to write MCP servers to {}", edgar_home.display()))?;
 
     println!("Added global MCP server '{name}'.");
 
@@ -171,15 +171,15 @@ fn run_remove(config_overrides: &CliConfigOverrides, remove_args: RemoveArgs) ->
 
     validate_server_name(&name)?;
 
-    let codex_home = find_codex_home().context("failed to resolve CODEX_HOME")?;
-    let mut servers = load_global_mcp_servers(&codex_home)
-        .with_context(|| format!("failed to load MCP servers from {}", codex_home.display()))?;
+    let edgar_home = find_edgar_home().context("failed to resolve CODEX_HOME")?;
+    let mut servers = load_global_mcp_servers(&edgar_home)
+        .with_context(|| format!("failed to load MCP servers from {}", edgar_home.display()))?;
 
     let removed = servers.remove(&name).is_some();
 
     if removed {
-        write_global_mcp_servers(&codex_home, &servers)
-            .with_context(|| format!("failed to write MCP servers to {}", codex_home.display()))?;
+        write_global_mcp_servers(&edgar_home, &servers)
+            .with_context(|| format!("failed to write MCP servers to {}", edgar_home.display()))?;
     }
 
     if removed {
@@ -237,7 +237,7 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
     }
 
     if entries.is_empty() {
-        println!("No MCP servers configured yet. Try `codex mcp add my-tool -- my-command`.");
+        println!("No MCP servers configured yet. Try `edgar mcp add my-tool -- my-command`.");
         return Ok(());
     }
 
@@ -427,7 +427,7 @@ fn run_get(config_overrides: &CliConfigOverrides, get_args: GetArgs) -> Result<(
     if let Some(timeout) = server.tool_timeout_sec {
         println!("  tool_timeout_sec: {}", timeout.as_secs_f64());
     }
-    println!("  remove: codex mcp remove {}", get_args.name);
+    println!("  remove: edgar mcp remove {}", get_args.name);
 
     Ok(())
 }

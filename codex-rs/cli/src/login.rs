@@ -10,8 +10,8 @@ use codex_login::run_login_server;
 use codex_protocol::mcp_protocol::AuthMode;
 use std::path::PathBuf;
 
-pub async fn login_with_chatgpt(codex_home: PathBuf) -> std::io::Result<()> {
-    let opts = ServerOptions::new(codex_home, CLIENT_ID.to_string());
+pub async fn login_with_chatgpt(edgar_home: PathBuf) -> std::io::Result<()> {
+    let opts = ServerOptions::new(edgar_home, CLIENT_ID.to_string());
     let server = run_login_server(opts)?;
 
     eprintln!(
@@ -25,7 +25,7 @@ pub async fn login_with_chatgpt(codex_home: PathBuf) -> std::io::Result<()> {
 pub async fn run_login_with_chatgpt(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides);
 
-    match login_with_chatgpt(config.codex_home).await {
+    match login_with_chatgpt(config.edgar_home).await {
         Ok(_) => {
             eprintln!("Successfully logged in");
             std::process::exit(0);
@@ -43,7 +43,7 @@ pub async fn run_login_with_api_key(
 ) -> ! {
     let config = load_config_or_exit(cli_config_overrides);
 
-    match login_with_api_key(&config.codex_home, &api_key) {
+    match login_with_api_key(&config.edgar_home, &api_key) {
         Ok(_) => {
             eprintln!("Successfully logged in");
             std::process::exit(0);
@@ -58,7 +58,7 @@ pub async fn run_login_with_api_key(
 pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides);
 
-    match CodexAuth::from_codex_home(&config.codex_home) {
+    match CodexAuth::from_edgar_home(&config.edgar_home) {
         Ok(Some(auth)) => match auth.mode {
             AuthMode::ApiKey => match auth.get_token().await {
                 Ok(api_key) => {
@@ -89,7 +89,7 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
 pub async fn run_logout(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides);
 
-    match logout(&config.codex_home) {
+    match logout(&config.edgar_home) {
         Ok(true) => {
             eprintln!("Successfully logged out");
             std::process::exit(0);

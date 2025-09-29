@@ -7,24 +7,24 @@ use predicates::str::contains;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
-fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
-    let mut cmd = assert_cmd::Command::cargo_bin("codex")?;
-    cmd.env("CODEX_HOME", codex_home);
+fn edgar_command(edgar_home: &Path) -> Result<assert_cmd::Command> {
+    let mut cmd = assert_cmd::Command::cargo_bin("edgar")?;
+    cmd.env("CODEX_HOME", edgar_home);
     Ok(cmd)
 }
 
 #[test]
 fn add_and_remove_server_updates_global_config() -> Result<()> {
-    let codex_home = TempDir::new()?;
+    let edgar_home = TempDir::new()?;
 
-    let mut add_cmd = codex_command(codex_home.path())?;
+    let mut add_cmd = edgar_command(edgar_home.path())?;
     add_cmd
         .args(["mcp", "add", "docs", "--", "echo", "hello"])
         .assert()
         .success()
         .stdout(contains("Added global MCP server 'docs'."));
 
-    let servers = load_global_mcp_servers(codex_home.path())?;
+    let servers = load_global_mcp_servers(edgar_home.path())?;
     assert_eq!(servers.len(), 1);
     let docs = servers.get("docs").expect("server should exist");
     match &docs.transport {
@@ -36,24 +36,24 @@ fn add_and_remove_server_updates_global_config() -> Result<()> {
         other => panic!("unexpected transport: {other:?}"),
     }
 
-    let mut remove_cmd = codex_command(codex_home.path())?;
+    let mut remove_cmd = edgar_command(edgar_home.path())?;
     remove_cmd
         .args(["mcp", "remove", "docs"])
         .assert()
         .success()
         .stdout(contains("Removed global MCP server 'docs'."));
 
-    let servers = load_global_mcp_servers(codex_home.path())?;
+    let servers = load_global_mcp_servers(edgar_home.path())?;
     assert!(servers.is_empty());
 
-    let mut remove_again_cmd = codex_command(codex_home.path())?;
+    let mut remove_again_cmd = edgar_command(edgar_home.path())?;
     remove_again_cmd
         .args(["mcp", "remove", "docs"])
         .assert()
         .success()
         .stdout(contains("No MCP server named 'docs' found."));
 
-    let servers = load_global_mcp_servers(codex_home.path())?;
+    let servers = load_global_mcp_servers(edgar_home.path())?;
     assert!(servers.is_empty());
 
     Ok(())
@@ -61,9 +61,9 @@ fn add_and_remove_server_updates_global_config() -> Result<()> {
 
 #[test]
 fn add_with_env_preserves_key_order_and_values() -> Result<()> {
-    let codex_home = TempDir::new()?;
+    let edgar_home = TempDir::new()?;
 
-    let mut add_cmd = codex_command(codex_home.path())?;
+    let mut add_cmd = edgar_command(edgar_home.path())?;
     add_cmd
         .args([
             "mcp",
@@ -80,7 +80,7 @@ fn add_with_env_preserves_key_order_and_values() -> Result<()> {
         .assert()
         .success();
 
-    let servers = load_global_mcp_servers(codex_home.path())?;
+    let servers = load_global_mcp_servers(edgar_home.path())?;
     let envy = servers.get("envy").expect("server should exist");
     let env = match &envy.transport {
         McpServerTransportConfig::Stdio { env: Some(env), .. } => env,

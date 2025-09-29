@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 /// Create sessions/YYYY/MM/DD and write a minimal rollout file containing the
 /// provided conversation id in the SessionMeta line. Returns the absolute path.
-fn write_minimal_rollout_with_id(codex_home: &TempDir, id: Uuid) -> PathBuf {
-    let sessions = codex_home.path().join("sessions/2024/01/01");
+fn write_minimal_rollout_with_id(edgar_home: &TempDir, id: Uuid) -> PathBuf {
+    let sessions = edgar_home.path().join("sessions/2024/01/01");
     std::fs::create_dir_all(&sessions).unwrap();
 
     let file = sessions.join(format!("rollout-2024-01-01T00-00-00-{id}.jsonl"));

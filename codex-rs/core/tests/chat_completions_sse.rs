@@ -51,11 +51,11 @@ async fn run_stream(sse_body: &str) -> Vec<ResponseEvent> {
         requires_openai_auth: false,
     };
 
-    let codex_home = match TempDir::new() {
+    let edgar_home = match TempDir::new() {
         Ok(dir) => dir,
         Err(e) => panic!("failed to create TempDir: {e}"),
     };
-    let mut config = load_default_config_for_test(&codex_home);
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider_id = provider.name.clone();
     config.model_provider = provider.clone();
     config.show_raw_agent_reasoning = true;

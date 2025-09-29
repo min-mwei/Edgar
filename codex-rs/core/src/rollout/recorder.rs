@@ -39,8 +39,8 @@ use codex_protocol::protocol::SessionMetaLine;
 /// Rollouts are recorded as JSONL and can be inspected with tools such as:
 ///
 /// ```ignore
-/// $ jq -C . ~/.codex/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
-/// $ fx ~/.codex/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
+/// $ jq -C . ~/.edgar/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
+/// $ fx ~/.edgar/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
 /// ```
 #[derive(Clone)]
 pub struct RolloutRecorder {
@@ -86,11 +86,11 @@ impl RolloutRecorderParams {
 impl RolloutRecorder {
     /// List conversations (rollout files) under the provided Codex home directory.
     pub async fn list_conversations(
-        codex_home: &Path,
+        edgar_home: &Path,
         page_size: usize,
         cursor: Option<&Cursor>,
     ) -> std::io::Result<ConversationsPage> {
-        get_conversations(codex_home, page_size, cursor).await
+        get_conversations(edgar_home, page_size, cursor).await
     }
 
     /// Attempt to create a new [`RolloutRecorder`]. If the sessions directory
@@ -295,10 +295,10 @@ fn create_log_file(
     config: &Config,
     conversation_id: ConversationId,
 ) -> std::io::Result<LogFileInfo> {
-    // Resolve ~/.codex/sessions/YYYY/MM/DD and create it if missing.
+    // Resolve ~/.edgar/sessions/YYYY/MM/DD and create it if missing.
     let timestamp = OffsetDateTime::now_local()
         .map_err(|e| IoError::other(format!("failed to get local time: {e}")))?;
-    let mut dir = config.codex_home.clone();
+    let mut dir = config.edgar_home.clone();
     dir.push(SESSIONS_SUBDIR);
     dir.push(timestamp.year().to_string());
     dir.push(format!("{:02}", u8::from(timestamp.month())));

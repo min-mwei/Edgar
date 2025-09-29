@@ -220,7 +220,7 @@ impl CodexMessageProcessor {
             }
         }
 
-        match login_with_api_key(&self.config.codex_home, &params.api_key) {
+        match login_with_api_key(&self.config.edgar_home, &params.api_key) {
             Ok(()) => {
                 self.auth_manager.reload();
                 self.outgoing
@@ -250,7 +250,7 @@ impl CodexMessageProcessor {
 
         let opts = LoginServerOptions {
             open_browser: false,
-            ..LoginServerOptions::new(config.codex_home.clone(), CLIENT_ID.to_string())
+            ..LoginServerOptions::new(config.edgar_home.clone(), CLIENT_ID.to_string())
         };
 
         enum LoginChatGptReply {
@@ -470,7 +470,7 @@ impl CodexMessageProcessor {
     }
 
     async fn get_user_saved_config(&self, request_id: RequestId) {
-        let toml_value = match load_config_as_toml(&self.config.codex_home) {
+        let toml_value = match load_config_as_toml(&self.config.edgar_home) {
             Ok(val) => val,
             Err(err) => {
                 let error = JSONRPCErrorError {
@@ -506,7 +506,7 @@ impl CodexMessageProcessor {
 
     async fn get_user_info(&self, request_id: RequestId) {
         // Read alleged user email from auth.json (best-effort; not verified).
-        let auth_path = get_auth_file(&self.config.codex_home);
+        let auth_path = get_auth_file(&self.config.edgar_home);
         let alleged_user_email = match try_read_auth_json(&auth_path) {
             Ok(auth) => auth.tokens.and_then(|t| t.id_token.email),
             Err(_) => None,
@@ -529,7 +529,7 @@ impl CodexMessageProcessor {
         ];
 
         match persist_overrides_and_clear_if_none(
-            &self.config.codex_home,
+            &self.config.edgar_home,
             self.config.active_profile.as_deref(),
             &overrides,
         )
@@ -676,7 +676,7 @@ impl CodexMessageProcessor {
         let cursor_ref = cursor_obj.as_ref();
 
         let page = match RolloutRecorder::list_conversations(
-            &self.config.codex_home,
+            &self.config.edgar_home,
             page_size,
             cursor_ref,
         )
@@ -797,7 +797,7 @@ impl CodexMessageProcessor {
 
         // Verify that the rollout path is in the sessions directory or else
         // a malicious client could specify an arbitrary path.
-        let rollout_folder = self.config.codex_home.join(codex_core::SESSIONS_SUBDIR);
+        let rollout_folder = self.config.edgar_home.join(codex_core::SESSIONS_SUBDIR);
         let canonical_rollout_path = tokio::fs::canonicalize(&rollout_path).await;
         let canonical_rollout_path = if let Ok(path) = canonical_rollout_path
             && path.starts_with(&rollout_folder)
@@ -900,7 +900,7 @@ impl CodexMessageProcessor {
         let result: std::io::Result<()> = async {
             let archive_folder = self
                 .config
-                .codex_home
+                .edgar_home
                 .join(codex_core::ARCHIVED_SESSIONS_SUBDIR);
             tokio::fs::create_dir_all(&archive_folder).await?;
             tokio::fs::rename(&canonical_rollout_path, &archive_folder.join(&file_name)).await?;

@@ -72,8 +72,8 @@ impl CodexAuth {
     }
 
     /// Loads the available auth information from the auth.json.
-    pub fn from_codex_home(codex_home: &Path) -> std::io::Result<Option<CodexAuth>> {
-        load_auth(codex_home)
+    pub fn from_edgar_home(edgar_home: &Path) -> std::io::Result<Option<CodexAuth>> {
+        load_auth(edgar_home)
     }
 
     pub async fn get_token_data(&self) -> Result<TokenData, std::io::Error> {
@@ -196,14 +196,14 @@ pub fn read_openai_api_key_from_env() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub fn get_auth_file(codex_home: &Path) -> PathBuf {
-    codex_home.join("auth.json")
+pub fn get_auth_file(edgar_home: &Path) -> PathBuf {
+    edgar_home.join("auth.json")
 }
 
-/// Delete the auth.json file inside `codex_home` if it exists. Returns `Ok(true)`
+/// Delete the auth.json file inside `edgar_home` if it exists. Returns `Ok(true)`
 /// if a file was removed, `Ok(false)` if no auth file was present.
-pub fn logout(codex_home: &Path) -> std::io::Result<bool> {
-    let auth_file = get_auth_file(codex_home);
+pub fn logout(edgar_home: &Path) -> std::io::Result<bool> {
+    let auth_file = get_auth_file(edgar_home);
     match std::fs::remove_file(&auth_file) {
         Ok(_) => Ok(true),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -212,17 +212,17 @@ pub fn logout(codex_home: &Path) -> std::io::Result<bool> {
 }
 
 /// Writes an `auth.json` that contains only the API key.
-pub fn login_with_api_key(codex_home: &Path, api_key: &str) -> std::io::Result<()> {
+pub fn login_with_api_key(edgar_home: &Path, api_key: &str) -> std::io::Result<()> {
     let auth_dot_json = AuthDotJson {
         openai_api_key: Some(api_key.to_string()),
         tokens: None,
         last_refresh: None,
     };
-    write_auth_json(&get_auth_file(codex_home), &auth_dot_json)
+    write_auth_json(&get_auth_file(edgar_home), &auth_dot_json)
 }
 
-fn load_auth(codex_home: &Path) -> std::io::Result<Option<CodexAuth>> {
-    let auth_file = get_auth_file(codex_home);
+fn load_auth(edgar_home: &Path) -> std::io::Result<Option<CodexAuth>> {
+    let auth_file = get_auth_file(edgar_home);
     let client = crate::default_client::create_client();
     let auth_dot_json = match try_read_auth_json(&auth_file) {
         Ok(auth) => auth,
@@ -393,17 +393,17 @@ mod tests {
 
     #[tokio::test]
     async fn roundtrip_auth_dot_json() {
-        let codex_home = tempdir().unwrap();
+        let edgar_home = tempdir().unwrap();
         let _ = write_auth_file(
             AuthFileParams {
                 openai_api_key: None,
                 chatgpt_plan_type: "pro".to_string(),
             },
-            codex_home.path(),
+            edgar_home.path(),
         )
         .expect("failed to write auth file");
 
-        let file = get_auth_file(codex_home.path());
+        let file = get_auth_file(edgar_home.path());
         let auth_dot_json = try_read_auth_json(&file).unwrap();
         write_auth_json(&file, &auth_dot_json).unwrap();
 
@@ -439,13 +439,13 @@ mod tests {
 
     #[tokio::test]
     async fn pro_account_with_no_api_key_uses_chatgpt_auth() {
-        let codex_home = tempdir().unwrap();
+        let edgar_home = tempdir().unwrap();
         let fake_jwt = write_auth_file(
             AuthFileParams {
                 openai_api_key: None,
                 chatgpt_plan_type: "pro".to_string(),
             },
-            codex_home.path(),
+            edgar_home.path(),
         )
         .expect("failed to write auth file");
 
@@ -455,7 +455,7 @@ mod tests {
             auth_dot_json,
             auth_file: _,
             ..
-        } = super::load_auth(codex_home.path()).unwrap().unwrap();
+        } = super::load_auth(edgar_home.path()).unwrap().unwrap();
         assert_eq!(None, api_key);
         assert_eq!(AuthMode::ChatGPT, mode);
 
@@ -522,8 +522,8 @@ mod tests {
         chatgpt_plan_type: String,
     }
 
-    fn write_auth_file(params: AuthFileParams, codex_home: &Path) -> std::io::Result<String> {
-        let auth_file = get_auth_file(codex_home);
+    fn write_auth_file(params: AuthFileParams, edgar_home: &Path) -> std::io::Result<String> {
+        let auth_file = get_auth_file(edgar_home);
         // Create a minimal valid JWT for the id_token field.
         #[derive(Serialize)]
         struct Header {
@@ -575,7 +575,7 @@ mod tests {
 /// different parts of the program seeing inconsistent auth data mid‑run.
 #[derive(Debug)]
 pub struct AuthManager {
-    codex_home: PathBuf,
+    edgar_home: PathBuf,
     inner: RwLock<CachedAuth>,
 }
 
@@ -584,10 +584,10 @@ impl AuthManager {
     /// preferred auth method. Errors loading auth are swallowed; `auth()` will
     /// simply return `None` in that case so callers can treat it as an
     /// unauthenticated state.
-    pub fn new(codex_home: PathBuf) -> Self {
-        let auth = CodexAuth::from_codex_home(&codex_home).ok().flatten();
+    pub fn new(edgar_home: PathBuf) -> Self {
+        let auth = CodexAuth::from_edgar_home(&edgar_home).ok().flatten();
         Self {
-            codex_home,
+            edgar_home,
             inner: RwLock::new(CachedAuth { auth }),
         }
     }
@@ -596,7 +596,7 @@ impl AuthManager {
     pub fn from_auth_for_testing(auth: CodexAuth) -> Arc<Self> {
         let cached = CachedAuth { auth: Some(auth) };
         Arc::new(Self {
-            codex_home: PathBuf::new(),
+            edgar_home: PathBuf::new(),
             inner: RwLock::new(cached),
         })
     }
@@ -609,7 +609,7 @@ impl AuthManager {
     /// Force a reload of the auth information from auth.json. Returns
     /// whether the auth value changed.
     pub fn reload(&self) -> bool {
-        let new_auth = CodexAuth::from_codex_home(&self.codex_home).ok().flatten();
+        let new_auth = CodexAuth::from_edgar_home(&self.edgar_home).ok().flatten();
         if let Ok(mut guard) = self.inner.write() {
             let changed = !AuthManager::auths_equal(&guard.auth, &new_auth);
             guard.auth = new_auth;
@@ -628,8 +628,8 @@ impl AuthManager {
     }
 
     /// Convenience constructor returning an `Arc` wrapper.
-    pub fn shared(codex_home: PathBuf) -> Arc<Self> {
-        Arc::new(Self::new(codex_home))
+    pub fn shared(edgar_home: PathBuf) -> Arc<Self> {
+        Arc::new(Self::new(edgar_home))
     }
 
     /// Attempt to refresh the current auth token (if any). On success, reload
@@ -654,7 +654,7 @@ impl AuthManager {
     /// reloads the in‑memory auth cache so callers immediately observe the
     /// unauthenticated state.
     pub fn logout(&self) -> std::io::Result<bool> {
-        let removed = super::auth::logout(&self.codex_home)?;
+        let removed = super::auth::logout(&self.edgar_home)?;
         // Always reload to clear any cached auth (even if file absent).
         self.reload();
         Ok(removed)

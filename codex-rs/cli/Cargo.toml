@@ -1,14 +1,14 @@
 [package]
 edition = "2024"
-name = "codex-cli"
+name = "edgar-cli"
 version = { workspace = true }
 
 [[bin]]
-name = "codex"
+name = "edgar"
 path = "src/main.rs"
 
 [lib]
-name = "codex_cli"
+name = "edgar_cli"
 path = "src/lib.rs"
 
 [lints]

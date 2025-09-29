@@ -32,11 +32,11 @@ async fn test_send_message_success() {
     let server = create_mock_chat_completions_server(responses).await;
 
     // Create a temporary Codex home with config pointing at the mock server.
-    let codex_home = TempDir::new().expect("create temp dir");
-    create_config_toml(codex_home.path(), &server.uri()).expect("write config.toml");
+    let edgar_home = TempDir::new().expect("create temp dir");
+    create_config_toml(edgar_home.path(), &server.uri()).expect("write config.toml");
 
     // Start MCP server process and initialize.
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
@@ -129,8 +129,8 @@ async fn send_message(message: &str, conversation_id: ConversationId, mcp: &mut 
 #[tokio::test]
 async fn test_send_message_session_not_found() {
     // Start MCP without creating a Codex session
-    let codex_home = TempDir::new().expect("tempdir");
-    let mut mcp = McpProcess::new(codex_home.path()).await.expect("spawn");
+    let edgar_home = TempDir::new().expect("tempdir");
+    let mut mcp = McpProcess::new(edgar_home.path()).await.expect("spawn");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
         .await
         .expect("timeout")
@@ -162,8 +162,8 @@ async fn test_send_message_session_not_found() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
-    let config_toml = codex_home.join("config.toml");
+fn create_config_toml(edgar_home: &Path, server_uri: &str) -> std::io::Result<()> {
+    let config_toml = edgar_home.join("config.toml");
     std::fs::write(
         config_toml,
         format!(

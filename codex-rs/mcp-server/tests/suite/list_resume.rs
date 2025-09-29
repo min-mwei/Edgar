@@ -22,27 +22,27 @@ const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_list_and_resume_conversations() {
     // Prepare a temporary CODEX_HOME with a few fake rollout files.
-    let codex_home = TempDir::new().expect("create temp dir");
+    let edgar_home = TempDir::new().expect("create temp dir");
     create_fake_rollout(
-        codex_home.path(),
+        edgar_home.path(),
         "2025-01-02T12-00-00",
         "2025-01-02T12:00:00Z",
         "Hello A",
     );
     create_fake_rollout(
-        codex_home.path(),
+        edgar_home.path(),
         "2025-01-01T13-00-00",
         "2025-01-01T13:00:00Z",
         "Hello B",
     );
     create_fake_rollout(
-        codex_home.path(),
+        edgar_home.path(),
         "2025-01-01T12-00-00",
         "2025-01-01T12:00:00Z",
         "Hello C",
     );
 
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
@@ -145,13 +145,13 @@ async fn test_list_and_resume_conversations() {
     assert!(!conversation_id.to_string().is_empty());
 }
 
-fn create_fake_rollout(codex_home: &Path, filename_ts: &str, meta_rfc3339: &str, preview: &str) {
+fn create_fake_rollout(edgar_home: &Path, filename_ts: &str, meta_rfc3339: &str, preview: &str) {
     let uuid = Uuid::new_v4();
     // sessions/YYYY/MM/DD/ derived from filename_ts (YYYY-MM-DDThh-mm-ss)
     let year = &filename_ts[0..4];
     let month = &filename_ts[5..7];
     let day = &filename_ts[8..10];
-    let dir = codex_home.join("sessions").join(year).join(month).join(day);
+    let dir = edgar_home.join("sessions").join(year).join(month).join(day);
     fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("create sessions dir: {e}"));
 
     let file_path = dir.join(format!("rollout-{filename_ts}-{uuid}.jsonl"));

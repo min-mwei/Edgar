@@ -22,9 +22,9 @@ const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_info_returns_email_from_auth_json() {
-    let codex_home = TempDir::new().expect("create tempdir");
+    let edgar_home = TempDir::new().expect("create tempdir");
 
-    let auth_path = get_auth_file(codex_home.path());
+    let auth_path = get_auth_file(edgar_home.path());
     let mut id_token = IdTokenInfo::default();
     id_token.email = Some("user@example.com".to_string());
     id_token.raw_jwt = encode_id_token_with_email("user@example.com").expect("encode id token");
@@ -41,7 +41,7 @@ async fn user_info_returns_email_from_auth_json() {
     };
     write_auth_json(&auth_path, &auth).expect("write auth.json");
 
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())

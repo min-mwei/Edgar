@@ -92,8 +92,8 @@ async fn codex_mini_latest_tools() {
     };
 
     let cwd = TempDir::new().unwrap();
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.cwd = cwd.path().to_path_buf();
     config.model_provider = model_provider;
     config.user_instructions = Some("be consistent and helpful".to_string());
@@ -177,8 +177,8 @@ async fn prompt_tools_are_consistent_across_requests() {
     };
 
     let cwd = TempDir::new().unwrap();
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.cwd = cwd.path().to_path_buf();
     config.model_provider = model_provider;
     config.user_instructions = Some("be consistent and helpful".to_string());
@@ -261,8 +261,8 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
     };
 
     let cwd = TempDir::new().unwrap();
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.cwd = cwd.path().to_path_buf();
     config.model_provider = model_provider;
     config.user_instructions = Some("be consistent and helpful".to_string());
@@ -380,8 +380,8 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() {
     };
 
     let cwd = TempDir::new().unwrap();
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.cwd = cwd.path().to_path_buf();
     config.model_provider = model_provider;
     config.user_instructions = Some("be consistent and helpful".to_string());
@@ -508,8 +508,8 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() {
     };
 
     let cwd = TempDir::new().unwrap();
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.cwd = cwd.path().to_path_buf();
     config.model_provider = model_provider;
     config.user_instructions = Some("be consistent and helpful".to_string());
@@ -631,8 +631,8 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() {
     };
 
     let cwd = TempDir::new().unwrap();
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.cwd = cwd.path().to_path_buf();
     config.model_provider = model_provider;
     config.user_instructions = Some("be consistent and helpful".to_string());
@@ -745,8 +745,8 @@ async fn send_user_turn_with_changes_sends_environment_context() {
     };
 
     let cwd = TempDir::new().unwrap();
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.cwd = cwd.path().to_path_buf();
     config.model_provider = model_provider;
     config.user_instructions = Some("be consistent and helpful".to_string());

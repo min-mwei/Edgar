@@ -74,8 +74,8 @@ async fn review_op_emits_lifecycle_and_review_output() {
     let review_json_escaped = serde_json::to_string(&review_json).unwrap();
     let sse_raw = sse_template.replace("__REVIEW__", &review_json_escaped);
     let server = start_responses_server_with_sse(&sse_raw, 1).await;
-    let codex_home = TempDir::new().unwrap();
-    let codex = new_conversation_for_server(&server, &codex_home, |_| {}).await;
+    let edgar_home = TempDir::new().unwrap();
+    let codex = new_conversation_for_server(&server, &edgar_home, |_| {}).await;
 
     // Submit review request.
     codex
@@ -177,8 +177,8 @@ async fn review_op_with_plain_text_emits_review_fallback() {
         {"type":"response.completed", "response": {"id": "__ID__"}}
     ]"#;
     let server = start_responses_server_with_sse(sse_raw, 1).await;
-    let codex_home = TempDir::new().unwrap();
-    let codex = new_conversation_for_server(&server, &codex_home, |_| {}).await;
+    let edgar_home = TempDir::new().unwrap();
+    let codex = new_conversation_for_server(&server, &edgar_home, |_| {}).await;
 
     codex
         .submit(Op::Review {
@@ -246,8 +246,8 @@ async fn review_does_not_emit_agent_message_on_structured_output() {
     let review_json_escaped = serde_json::to_string(&review_json).unwrap();
     let sse_raw = sse_template.replace("__REVIEW__", &review_json_escaped);
     let server = start_responses_server_with_sse(&sse_raw, 1).await;
-    let codex_home = TempDir::new().unwrap();
-    let codex = new_conversation_for_server(&server, &codex_home, |_| {}).await;
+    let edgar_home = TempDir::new().unwrap();
+    let codex = new_conversation_for_server(&server, &edgar_home, |_| {}).await;
 
     codex
         .submit(Op::Review {
@@ -295,9 +295,9 @@ async fn review_uses_custom_review_model_from_config() {
         {"type":"response.completed", "response": {"id": "__ID__"}}
     ]"#;
     let server = start_responses_server_with_sse(sse_raw, 1).await;
-    let codex_home = TempDir::new().unwrap();
+    let edgar_home = TempDir::new().unwrap();
     // Choose a review model different from the main model; ensure it is used.
-    let codex = new_conversation_for_server(&server, &codex_home, |cfg| {
+    let codex = new_conversation_for_server(&server, &edgar_home, |cfg| {
         cfg.model = "gpt-4.1".to_string();
         cfg.review_model = "gpt-5".to_string();
     })
@@ -350,14 +350,14 @@ async fn review_input_isolated_from_parent_history() {
     let server = start_responses_server_with_sse(sse_raw, 1).await;
 
     // Seed a parent session history via resume file with both user + assistant items.
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers()["openai"].clone()
     };
 
-    let session_file = codex_home.path().join("resume.jsonl");
+    let session_file = edgar_home.path().join("resume.jsonl");
     {
         let mut f = tokio::fs::File::create(&session_file).await.unwrap();
         let convo_id = Uuid::new_v4();
@@ -415,7 +415,7 @@ async fn review_input_isolated_from_parent_history() {
             .unwrap();
     }
     let codex =
-        resume_conversation_for_server(&server, &codex_home, session_file.clone(), |_| {}).await;
+        resume_conversation_for_server(&server, &edgar_home, session_file.clone(), |_| {}).await;
 
     // Submit review request; it must start fresh (no parent history in `input`).
     let review_prompt = "Please review only this".to_string();
@@ -528,8 +528,8 @@ async fn review_history_does_not_leak_into_parent_session() {
         {"type":"response.completed", "response": {"id": "__ID__"}}
     ]"#;
     let server = start_responses_server_with_sse(sse_raw, 2).await;
-    let codex_home = TempDir::new().unwrap();
-    let codex = new_conversation_for_server(&server, &codex_home, |_| {}).await;
+    let edgar_home = TempDir::new().unwrap();
+    let codex = new_conversation_for_server(&server, &edgar_home, |_| {}).await;
 
     // 1) Run a review turn that produces an assistant message (isolated in child).
     codex
@@ -619,7 +619,7 @@ async fn start_responses_server_with_sse(sse_raw: &str, expected_requests: usize
 #[expect(clippy::expect_used)]
 async fn new_conversation_for_server<F>(
     server: &MockServer,
-    codex_home: &TempDir,
+    edgar_home: &TempDir,
     mutator: F,
 ) -> Arc<CodexConversation>
 where
@@ -629,7 +629,7 @@ where
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers()["openai"].clone()
     };
-    let mut config = load_default_config_for_test(codex_home);
+    let mut config = load_default_config_for_test(edgar_home);
     config.model_provider = model_provider;
     mutator(&mut config);
     let conversation_manager =
@@ -645,7 +645,7 @@ where
 #[expect(clippy::expect_used)]
 async fn resume_conversation_for_server<F>(
     server: &MockServer,
-    codex_home: &TempDir,
+    edgar_home: &TempDir,
     resume_path: std::path::PathBuf,
     mutator: F,
 ) -> Arc<CodexConversation>
@@ -656,7 +656,7 @@ where
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers()["openai"].clone()
     };
-    let mut config = load_default_config_for_test(codex_home);
+    let mut config = load_default_config_for_test(edgar_home);
     config.model_provider = model_provider;
     mutator(&mut config);
     let conversation_manager =

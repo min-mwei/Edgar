@@ -678,37 +678,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-cli"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "clap",
- "clap_complete",
- "codex-arg0",
- "codex-chatgpt",
- "codex-common",
- "codex-core",
- "codex-exec",
- "codex-login",
- "codex-mcp-server",
- "codex-process-hardening",
- "codex-protocol",
- "codex-protocol-ts",
- "codex-tui",
- "ctor 0.5.0",
- "owo-colors",
- "predicates",
- "pretty_assertions",
- "serde_json",
- "supports-color",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "codex-common"
 version = "0.0.0"
 dependencies = [
@@ -1658,6 +1627,37 @@ name = "dyn-clone"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c7a8fb8a9fbf66c1f703fe16184d10ca0ee9d23be5b4436400408ba54a95005"
+
+[[package]]
+name = "edgar-cli"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "clap_complete",
+ "codex-arg0",
+ "codex-chatgpt",
+ "codex-common",
+ "codex-core",
+ "codex-exec",
+ "codex-login",
+ "codex-mcp-server",
+ "codex-process-hardening",
+ "codex-protocol",
+ "codex-protocol-ts",
+ "codex-tui",
+ "ctor 0.5.0",
+ "owo-colors",
+ "predicates",
+ "pretty_assertions",
+ "serde_json",
+ "supports-color",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "either"

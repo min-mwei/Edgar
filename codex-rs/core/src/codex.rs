@@ -2599,7 +2599,7 @@ async fn handle_container_exec_with_params(
                 .map(|p| p.to_string_lossy().to_string());
             let Some(path_to_codex) = path_to_codex else {
                 return Err(FunctionCallError::RespondToModel(
-                    "failed to determine path to codex executable".to_string(),
+                    "failed to determine path to edgar executable".to_string(),
                 ));
             };
 
@@ -3372,11 +3372,11 @@ mod tests {
 
     pub(crate) fn make_session_and_context() -> (Session, TurnContext) {
         let (tx_event, _rx_event) = async_channel::unbounded();
-        let codex_home = tempfile::tempdir().expect("create temp dir");
+        let edgar_home = tempfile::tempdir().expect("create temp dir");
         let config = Config::load_from_base_config_with_overrides(
             ConfigToml::default(),
             ConfigOverrides::default(),
-            codex_home.path().to_path_buf(),
+            edgar_home.path().to_path_buf(),
         )
         .expect("load default test config");
         let config = Arc::new(config);
@@ -3439,11 +3439,11 @@ mod tests {
         async_channel::Receiver<Event>,
     ) {
         let (tx_event, rx_event) = async_channel::unbounded();
-        let codex_home = tempfile::tempdir().expect("create temp dir");
+        let edgar_home = tempfile::tempdir().expect("create temp dir");
         let config = Config::load_from_base_config_with_overrides(
             ConfigToml::default(),
             ConfigOverrides::default(),
-            codex_home.path().to_path_buf(),
+            edgar_home.path().to_path_buf(),
         )
         .expect("load default test config");
         let config = Arc::new(config);

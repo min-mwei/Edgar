@@ -12,14 +12,14 @@ const CONFIG_TOML: &str = "config.toml";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn override_turn_context_does_not_persist_when_config_exists() {
-    let codex_home = TempDir::new().unwrap();
-    let config_path = codex_home.path().join(CONFIG_TOML);
+    let edgar_home = TempDir::new().unwrap();
+    let config_path = edgar_home.path().join(CONFIG_TOML);
     let initial_contents = "model = \"gpt-4o\"\n";
     tokio::fs::write(&config_path, initial_contents)
         .await
         .expect("seed config.toml");
 
-    let mut config = load_default_config_for_test(&codex_home);
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model = "gpt-4o".to_string();
 
     let conversation_manager =
@@ -53,14 +53,14 @@ async fn override_turn_context_does_not_persist_when_config_exists() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn override_turn_context_does_not_create_config_file() {
-    let codex_home = TempDir::new().unwrap();
-    let config_path = codex_home.path().join(CONFIG_TOML);
+    let edgar_home = TempDir::new().unwrap();
+    let config_path = edgar_home.path().join(CONFIG_TOML);
     assert!(
         !config_path.exists(),
         "test setup should start without config"
     );
 
-    let config = load_default_config_for_test(&codex_home);
+    let config = load_default_config_for_test(&edgar_home);
 
     let conversation_manager =
         ConversationManager::with_auth(CodexAuth::from_api_key("Test API Key"));

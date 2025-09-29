@@ -16,7 +16,7 @@ enum NoneBehavior {
 /// Persist overrides into `config.toml` using explicit key segments per
 /// override. This avoids ambiguity with keys that contain dots or spaces.
 pub async fn persist_overrides(
-    codex_home: &Path,
+    edgar_home: &Path,
     profile: Option<&str>,
     overrides: &[(&[&str], &str)],
 ) -> Result<()> {
@@ -25,28 +25,28 @@ pub async fn persist_overrides(
         .map(|(segments, value)| (*segments, Some(*value)))
         .collect();
 
-    persist_overrides_with_behavior(codex_home, profile, &with_options, NoneBehavior::Skip).await
+    persist_overrides_with_behavior(edgar_home, profile, &with_options, NoneBehavior::Skip).await
 }
 
 /// Persist overrides where values may be optional. Any entries with `None`
 /// values are skipped. If all values are `None`, this becomes a no-op and
 /// returns `Ok(())` without touching the file.
 pub async fn persist_non_null_overrides(
-    codex_home: &Path,
+    edgar_home: &Path,
     profile: Option<&str>,
     overrides: &[(&[&str], Option<&str>)],
 ) -> Result<()> {
-    persist_overrides_with_behavior(codex_home, profile, overrides, NoneBehavior::Skip).await
+    persist_overrides_with_behavior(edgar_home, profile, overrides, NoneBehavior::Skip).await
 }
 
 /// Persist overrides where `None` values clear any existing values from the
 /// configuration file.
 pub async fn persist_overrides_and_clear_if_none(
-    codex_home: &Path,
+    edgar_home: &Path,
     profile: Option<&str>,
     overrides: &[(&[&str], Option<&str>)],
 ) -> Result<()> {
-    persist_overrides_with_behavior(codex_home, profile, overrides, NoneBehavior::Remove).await
+    persist_overrides_with_behavior(edgar_home, profile, overrides, NoneBehavior::Remove).await
 }
 
 /// Apply a single override onto a `toml_edit` document while preserving
@@ -94,7 +94,7 @@ fn apply_toml_edit_override_segments(
 }
 
 async fn persist_overrides_with_behavior(
-    codex_home: &Path,
+    edgar_home: &Path,
     profile: Option<&str>,
     overrides: &[(&[&str], Option<&str>)],
     none_behavior: NoneBehavior,
@@ -112,7 +112,7 @@ async fn persist_overrides_with_behavior(
         return Ok(());
     }
 
-    let config_path = codex_home.join(CONFIG_TOML_FILE);
+    let config_path = edgar_home.join(CONFIG_TOML_FILE);
 
     let read_result = tokio::fs::read_to_string(&config_path).await;
     let mut doc = match read_result {
@@ -125,7 +125,7 @@ async fn persist_overrides_with_behavior(
                 return Ok(());
             }
 
-            tokio::fs::create_dir_all(codex_home).await?;
+            tokio::fs::create_dir_all(edgar_home).await?;
             DocumentMut::new()
         }
         Err(e) => return Err(e.into()),
@@ -179,7 +179,7 @@ async fn persist_overrides_with_behavior(
         return Ok(());
     }
 
-    let tmp_file = NamedTempFile::new_in(codex_home)?;
+    let tmp_file = NamedTempFile::new_in(edgar_home)?;
     tokio::fs::write(tmp_file.path(), doc.to_string()).await?;
     tmp_file.persist(config_path)?;
 
@@ -222,10 +222,10 @@ mod tests {
     #[tokio::test]
     async fn set_default_model_and_effort_top_level_when_no_profile() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         persist_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&[CONFIG_KEY_MODEL], "gpt-5-codex"),
@@ -235,7 +235,7 @@ mod tests {
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"model = "gpt-5-codex"
 model_reasoning_effort = "high"
 "#;
@@ -246,16 +246,16 @@ model_reasoning_effort = "high"
     #[tokio::test]
     async fn set_defaults_update_profile_when_profile_set() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Seed config with a profile selection but without profiles table
         let seed = "profile = \"o3\"\n";
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         persist_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&[CONFIG_KEY_MODEL], "o3"),
@@ -265,7 +265,7 @@ model_reasoning_effort = "high"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"profile = "o3"
 
 [profiles.o3]
@@ -279,16 +279,16 @@ model_reasoning_effort = "minimal"
     #[tokio::test]
     async fn set_defaults_update_profile_with_dot_and_space() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Seed config with a profile name that contains a dot and a space
         let seed = "profile = \"my.team name\"\n";
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         persist_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&[CONFIG_KEY_MODEL], "o3"),
@@ -298,7 +298,7 @@ model_reasoning_effort = "minimal"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"profile = "my.team name"
 
 [profiles."my.team name"]
@@ -312,23 +312,23 @@ model_reasoning_effort = "minimal"
     #[tokio::test]
     async fn set_defaults_update_when_profile_override_supplied() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // No profile key in config.toml
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), "")
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), "")
             .await
             .expect("seed write");
 
         // Persist with an explicit profile override
         persist_overrides(
-            codex_home,
+            edgar_home,
             Some("o3"),
             &[(&[CONFIG_KEY_MODEL], "o3"), (&[CONFIG_KEY_EFFORT], "high")],
         )
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"[profiles.o3]
 model = "o3"
 model_reasoning_effort = "high"
@@ -340,10 +340,10 @@ model_reasoning_effort = "high"
     #[tokio::test]
     async fn persist_overrides_creates_nested_tables() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         persist_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&["a", "b", "c"], "v"),
@@ -354,7 +354,7 @@ model_reasoning_effort = "high"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"x = "y"
 
 [a.b]
@@ -370,17 +370,17 @@ model = "gpt-5-codex"
     #[tokio::test]
     async fn persist_overrides_replaces_scalar_with_table() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
         let seed = "foo = \"bar\"\n";
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
-        persist_overrides(codex_home, None, &[(&["foo", "bar", "baz"], "ok")])
+        persist_overrides(edgar_home, None, &[(&["foo", "bar", "baz"], "ok")])
             .await
             .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"[foo.bar]
 baz = "ok"
 "#;
@@ -391,7 +391,7 @@ baz = "ok"
     #[tokio::test]
     async fn set_defaults_preserve_comments() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Seed a config with comments and spacing we expect to preserve
         let seed = r#"# Global comment
@@ -404,20 +404,20 @@ profile = "o3"
 # keep me
 existing = "keep"
 "#;
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         // Apply defaults; since profile is set, it should write under [profiles.o3]
         persist_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[(&[CONFIG_KEY_MODEL], "o3"), (&[CONFIG_KEY_EFFORT], "high")],
         )
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"# Global comment
 # Another line
 
@@ -437,7 +437,7 @@ model_reasoning_effort = "high"
     #[tokio::test]
     async fn set_defaults_preserve_global_comments() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Seed a config WITHOUT a profile, containing comments and spacing
         let seed = r#"# Top-level comments
@@ -445,13 +445,13 @@ model_reasoning_effort = "high"
 
 existing = "keep"
 "#;
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         // Since there is no profile, the defaults should be written at top-level
         persist_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&[CONFIG_KEY_MODEL], "gpt-5-codex"),
@@ -461,7 +461,7 @@ existing = "keep"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"# Top-level comments
 # should be preserved
 
@@ -476,20 +476,20 @@ model_reasoning_effort = "minimal"
     #[tokio::test]
     async fn persist_overrides_errors_on_parse_failure() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Write an intentionally invalid TOML file
         let invalid = "invalid = [unclosed";
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), invalid)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), invalid)
             .await
             .expect("seed write");
 
         // Attempting to persist should return an error and must not clobber the file.
-        let res = persist_overrides(codex_home, None, &[(&["x"], "y")]).await;
+        let res = persist_overrides(edgar_home, None, &[(&["x"], "y")]).await;
         assert!(res.is_err(), "expected parse error to propagate");
 
         // File should be unchanged
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         assert_eq!(contents, invalid);
     }
 
@@ -497,20 +497,20 @@ model_reasoning_effort = "minimal"
     #[tokio::test]
     async fn changing_only_model_preserves_existing_effort_top_level() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Seed with an effort value only
         let seed = "model_reasoning_effort = \"minimal\"\n";
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         // Change only the model
-        persist_overrides(codex_home, None, &[(&[CONFIG_KEY_MODEL], "o3")])
+        persist_overrides(edgar_home, None, &[(&[CONFIG_KEY_MODEL], "o3")])
             .await
             .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"model_reasoning_effort = "minimal"
 model = "o3"
 "#;
@@ -521,20 +521,20 @@ model = "o3"
     #[tokio::test]
     async fn changing_only_effort_preserves_existing_model_top_level() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Seed with a model value only
         let seed = "model = \"gpt-5-codex\"\n";
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         // Change only the effort
-        persist_overrides(codex_home, None, &[(&[CONFIG_KEY_EFFORT], "high")])
+        persist_overrides(edgar_home, None, &[(&[CONFIG_KEY_EFFORT], "high")])
             .await
             .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"model = "gpt-5-codex"
 model_reasoning_effort = "high"
 "#;
@@ -545,7 +545,7 @@ model_reasoning_effort = "high"
     #[tokio::test]
     async fn changing_only_model_preserves_effort_in_active_profile() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // Seed with an active profile and an existing effort under that profile
         let seed = r#"profile = "p1"
@@ -553,15 +553,15 @@ model_reasoning_effort = "high"
 [profiles.p1]
 model_reasoning_effort = "low"
 "#;
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
-        persist_overrides(codex_home, None, &[(&[CONFIG_KEY_MODEL], "o4-mini")])
+        persist_overrides(edgar_home, None, &[(&[CONFIG_KEY_MODEL], "o4-mini")])
             .await
             .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"profile = "p1"
 
 [profiles.p1]
@@ -575,25 +575,25 @@ model = "o4-mini"
     #[tokio::test]
     async fn changing_only_effort_preserves_model_in_profile_override() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         // No active profile key; we'll target an explicit override
         let seed = r#"[profiles.team]
 model = "gpt-5-codex"
 "#;
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         persist_overrides(
-            codex_home,
+            edgar_home,
             Some("team"),
             &[(&[CONFIG_KEY_EFFORT], "minimal")],
         )
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"[profiles.team]
 model = "gpt-5-codex"
 model_reasoning_effort = "minimal"
@@ -605,10 +605,10 @@ model_reasoning_effort = "minimal"
     #[tokio::test]
     async fn persist_non_null_skips_none_top_level() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         persist_non_null_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&[CONFIG_KEY_MODEL], Some("gpt-5-codex")),
@@ -618,7 +618,7 @@ model_reasoning_effort = "minimal"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = "model = \"gpt-5-codex\"\n";
         assert_eq!(contents, expected);
     }
@@ -627,10 +627,10 @@ model_reasoning_effort = "minimal"
     #[tokio::test]
     async fn persist_non_null_noop_when_all_none() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         persist_non_null_overrides(
-            codex_home,
+            edgar_home,
             None,
             &[(&["a"], None), (&["profiles", "p", "x"], None)],
         )
@@ -638,17 +638,17 @@ model_reasoning_effort = "minimal"
         .expect("persist");
 
         // Should not create config.toml on a pure no-op
-        assert!(!codex_home.join(CONFIG_TOML_FILE).exists());
+        assert!(!edgar_home.join(CONFIG_TOML_FILE).exists());
     }
 
     /// Verifies entries are written under the specified profile and `None` entries are skipped.
     #[tokio::test]
     async fn persist_non_null_respects_profile_override() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         persist_non_null_overrides(
-            codex_home,
+            edgar_home,
             Some("team"),
             &[
                 (&[CONFIG_KEY_MODEL], Some("o3")),
@@ -658,7 +658,7 @@ model_reasoning_effort = "minimal"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"[profiles.team]
 model = "o3"
 "#;
@@ -668,17 +668,17 @@ model = "o3"
     #[tokio::test]
     async fn persist_clear_none_removes_top_level_value() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         let seed = r#"model = "gpt-5-codex"
 model_reasoning_effort = "medium"
 "#;
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         persist_overrides_and_clear_if_none(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&[CONFIG_KEY_MODEL], None),
@@ -688,7 +688,7 @@ model_reasoning_effort = "medium"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = "model_reasoning_effort = \"high\"\n";
         assert_eq!(contents, expected);
     }
@@ -696,7 +696,7 @@ model_reasoning_effort = "medium"
     #[tokio::test]
     async fn persist_clear_none_respects_active_profile() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
         let seed = r#"profile = "team"
 
@@ -704,12 +704,12 @@ model_reasoning_effort = "medium"
 model = "gpt-4"
 model_reasoning_effort = "minimal"
 "#;
-        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+        tokio::fs::write(edgar_home.join(CONFIG_TOML_FILE), seed)
             .await
             .expect("seed write");
 
         persist_overrides_and_clear_if_none(
-            codex_home,
+            edgar_home,
             None,
             &[
                 (&[CONFIG_KEY_MODEL], None),
@@ -719,7 +719,7 @@ model_reasoning_effort = "minimal"
         .await
         .expect("persist");
 
-        let contents = read_config(codex_home).await;
+        let contents = read_config(edgar_home).await;
         let expected = r#"profile = "team"
 
 [profiles.team]
@@ -731,18 +731,18 @@ model_reasoning_effort = "high"
     #[tokio::test]
     async fn persist_clear_none_noop_when_file_missing() {
         let tmpdir = tempdir().expect("tmp");
-        let codex_home = tmpdir.path();
+        let edgar_home = tmpdir.path();
 
-        persist_overrides_and_clear_if_none(codex_home, None, &[(&[CONFIG_KEY_MODEL], None)])
+        persist_overrides_and_clear_if_none(edgar_home, None, &[(&[CONFIG_KEY_MODEL], None)])
             .await
             .expect("persist");
 
-        assert!(!codex_home.join(CONFIG_TOML_FILE).exists());
+        assert!(!edgar_home.join(CONFIG_TOML_FILE).exists());
     }
 
     // Test helper moved to bottom per review guidance.
-    async fn read_config(codex_home: &Path) -> String {
-        let p = codex_home.join(CONFIG_TOML_FILE);
+    async fn read_config(edgar_home: &Path) -> String {
+        let p = edgar_home.join(CONFIG_TOML_FILE);
         tokio::fs::read_to_string(p).await.unwrap_or_default()
     }
 }

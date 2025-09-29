@@ -86,11 +86,11 @@ impl<'de> serde::Deserialize<'de> for Cursor {
 /// can be supplied on the next call to resume after the last returned item, resilient to
 /// concurrent new sessions being appended. Ordering is stable by timestamp desc, then UUID desc.
 pub(crate) async fn get_conversations(
-    codex_home: &Path,
+    edgar_home: &Path,
     page_size: usize,
     cursor: Option<&Cursor>,
 ) -> io::Result<ConversationsPage> {
-    let mut root = codex_home.to_path_buf();
+    let mut root = edgar_home.to_path_buf();
     root.push(SESSIONS_SUBDIR);
 
     if !root.exists() {
@@ -117,7 +117,7 @@ pub(crate) async fn get_conversation(path: &Path) -> io::Result<String> {
 
 /// Load conversation file paths from disk using directory traversal.
 ///
-/// Directory layout: `~/.codex/sessions/YYYY/MM/DD/rollout-YYYY-MM-DDThh-mm-ss-<uuid>.jsonl`
+/// Directory layout: `~/.edgar/sessions/YYYY/MM/DD/rollout-YYYY-MM-DDThh-mm-ss-<uuid>.jsonl`
 /// Returned newest (latest) first.
 async fn traverse_directories_for_paths(
     root: PathBuf,
@@ -343,7 +343,7 @@ async fn read_head_and_flags(
 /// paginated listing implementation. Returns `Ok(Some(path))` if found, `Ok(None)` if not present
 /// or the id is invalid.
 pub async fn find_conversation_path_by_id_str(
-    codex_home: &Path,
+    edgar_home: &Path,
     id_str: &str,
 ) -> io::Result<Option<PathBuf>> {
     // Validate UUID format early.
@@ -351,7 +351,7 @@ pub async fn find_conversation_path_by_id_str(
         return Ok(None);
     }
 
-    let mut root = codex_home.to_path_buf();
+    let mut root = edgar_home.to_path_buf();
     root.push(SESSIONS_SUBDIR);
     if !root.exists() {
         return Ok(None);

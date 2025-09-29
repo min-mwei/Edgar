@@ -21,8 +21,8 @@ use tokio::time::timeout;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
-fn create_config_toml(codex_home: &Path) -> std::io::Result<()> {
-    let config_toml = codex_home.join("config.toml");
+fn create_config_toml(edgar_home: &Path) -> std::io::Result<()> {
+    let config_toml = edgar_home.join("config.toml");
     std::fs::write(
         config_toml,
         r#"
@@ -58,10 +58,10 @@ chatgpt_base_url = "https://api.chatgpt.com"
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn get_config_toml_parses_all_fields() {
-    let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
-    create_config_toml(codex_home.path()).expect("write config.toml");
+    let edgar_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
+    create_config_toml(edgar_home.path()).expect("write config.toml");
 
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
@@ -121,9 +121,9 @@ async fn get_config_toml_parses_all_fields() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn get_config_toml_empty() {
-    let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
+    let edgar_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
 
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())

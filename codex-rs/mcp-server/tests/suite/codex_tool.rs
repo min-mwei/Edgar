@@ -326,10 +326,10 @@ async fn codex_tool_passes_base_instructions() -> anyhow::Result<()> {
         )?])
         .await;
 
-    // Run `codex mcp` with a specific config.toml.
-    let codex_home = TempDir::new()?;
-    create_config_toml(codex_home.path(), &server.uri())?;
-    let mut mcp_process = McpProcess::new(codex_home.path()).await?;
+    // Run `edgar mcp` with a specific config.toml.
+    let edgar_home = TempDir::new()?;
+    create_config_toml(edgar_home.path(), &server.uri())?;
+    let mut mcp_process = McpProcess::new(edgar_home.path()).await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp_process.initialize()).await??;
 
     // Send a "codex" tool request, which should hit the completions endpoint.
@@ -420,22 +420,22 @@ pub struct McpHandle {
 
 async fn create_mcp_process(responses: Vec<String>) -> anyhow::Result<McpHandle> {
     let server = create_mock_chat_completions_server(responses).await;
-    let codex_home = TempDir::new()?;
-    create_config_toml(codex_home.path(), &server.uri())?;
-    let mut mcp_process = McpProcess::new(codex_home.path()).await?;
+    let edgar_home = TempDir::new()?;
+    create_config_toml(edgar_home.path(), &server.uri())?;
+    let mut mcp_process = McpProcess::new(edgar_home.path()).await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp_process.initialize()).await??;
     Ok(McpHandle {
         process: mcp_process,
         server,
-        dir: codex_home,
+        dir: edgar_home,
     })
 }
 
 /// Create a Codex config that uses the mock server as the model provider.
 /// It also uses `approval_policy = "untrusted"` so that we exercise the
 /// elicitation code path for shell commands.
-fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
-    let config_toml = codex_home.join("config.toml");
+fn create_config_toml(edgar_home: &Path, server_uri: &str) -> std::io::Result<()> {
+    let config_toml = edgar_home.join("config.toml");
     std::fs::write(
         config_toml,
         format!(

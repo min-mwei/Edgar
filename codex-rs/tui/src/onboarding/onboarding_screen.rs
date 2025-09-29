@@ -72,7 +72,7 @@ impl OnboardingScreen {
             config,
         } = args;
         let cwd = config.cwd.clone();
-        let codex_home = config.codex_home;
+        let edgar_home = config.edgar_home;
         let mut steps: Vec<Step> = vec![Step::Welcome(WelcomeWidget::new(
             !matches!(login_status, LoginStatus::NotAuthenticated),
             tui.frame_requester(),
@@ -83,7 +83,7 @@ impl OnboardingScreen {
                 highlighted_mode: AuthMode::ChatGPT,
                 error: None,
                 sign_in_state: Arc::new(RwLock::new(SignInState::PickMode)),
-                codex_home: codex_home.clone(),
+                edgar_home: edgar_home.clone(),
                 login_status,
                 auth_manager,
             }))
@@ -98,7 +98,7 @@ impl OnboardingScreen {
         if show_trust_screen {
             steps.push(Step::TrustDirectory(TrustDirectoryWidget {
                 cwd,
-                codex_home,
+                edgar_home,
                 is_git_repo,
                 selection: None,
                 highlighted,

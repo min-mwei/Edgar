@@ -50,8 +50,8 @@ async fn shell_command_interruption() -> anyhow::Result<()> {
 
     let tmp = TempDir::new()?;
     // Temporary Codex home with config pointing at the mock server.
-    let codex_home = tmp.path().join("codex_home");
-    std::fs::create_dir(&codex_home)?;
+    let edgar_home = tmp.path().join("edgar_home");
+    std::fs::create_dir(&edgar_home)?;
     let working_directory = tmp.path().join("workdir");
     std::fs::create_dir(&working_directory)?;
 
@@ -63,10 +63,10 @@ async fn shell_command_interruption() -> anyhow::Result<()> {
         "call_sleep",
     )?])
     .await;
-    create_config_toml(&codex_home, server.uri())?;
+    create_config_toml(&edgar_home, server.uri())?;
 
     // Start MCP server and initialize.
-    let mut mcp = McpProcess::new(&codex_home).await?;
+    let mut mcp = McpProcess::new(&edgar_home).await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
 
     // 1) newConversation
@@ -135,8 +135,8 @@ async fn shell_command_interruption() -> anyhow::Result<()> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn create_config_toml(codex_home: &Path, server_uri: String) -> std::io::Result<()> {
-    let config_toml = codex_home.join("config.toml");
+fn create_config_toml(edgar_home: &Path, server_uri: String) -> std::io::Result<()> {
+    let config_toml = edgar_home.join("config.toml");
     std::fs::write(
         config_toml,
         format!(

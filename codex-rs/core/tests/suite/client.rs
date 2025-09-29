@@ -73,11 +73,11 @@ fn assert_message_ends_with(request_body: &serde_json::Value, text: &str) {
     );
 }
 
-/// Writes an `auth.json` into the provided `codex_home` with the specified parameters.
+/// Writes an `auth.json` into the provided `edgar_home` with the specified parameters.
 /// Returns the fake JWT string written to `tokens.id_token`.
 #[expect(clippy::unwrap_used)]
 fn write_auth_json(
-    codex_home: &TempDir,
+    edgar_home: &TempDir,
     openai_api_key: Option<&str>,
     chatgpt_plan_type: &str,
     access_token: &str,
@@ -117,7 +117,7 @@ fn write_auth_json(
     });
 
     std::fs::write(
-        codex_home.path().join("auth.json"),
+        edgar_home.path().join("auth.json"),
         serde_json::to_string_pretty(&auth_json).unwrap(),
     )
     .unwrap();
@@ -230,8 +230,8 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers()["openai"].clone()
     };
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = model_provider;
     // Also configure user instructions to ensure they are NOT delivered on resume.
     config.user_instructions = Some("be nice".to_string());
@@ -316,8 +316,8 @@ async fn includes_conversation_id_and_model_headers_in_request() {
     };
 
     // Init session
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = model_provider;
 
     let conversation_manager =
@@ -381,8 +381,8 @@ async fn includes_base_instructions_override_in_request() {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers()["openai"].clone()
     };
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
 
     config.base_instructions = Some("test instructions".to_string());
     config.model_provider = model_provider;
@@ -442,8 +442,8 @@ async fn chatgpt_auth_sends_correct_request() {
     };
 
     // Init session
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = model_provider;
     let conversation_manager = ConversationManager::with_auth(create_dummy_codex_auth());
     let NewConversation {
@@ -517,23 +517,23 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
     };
 
     // Init session
-    let codex_home = TempDir::new().unwrap();
+    let edgar_home = TempDir::new().unwrap();
     // Write auth.json that contains both API key and ChatGPT tokens for a plan that should prefer ChatGPT,
     // but config will force API key preference.
     let _jwt = write_auth_json(
-        &codex_home,
+        &edgar_home,
         Some("sk-test-key"),
         "pro",
         "Access-123",
         Some("acc-123"),
     );
 
-    let mut config = load_default_config_for_test(&codex_home);
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = model_provider;
 
-    let auth_manager = match CodexAuth::from_codex_home(codex_home.path()) {
+    let auth_manager = match CodexAuth::from_edgar_home(edgar_home.path()) {
         Ok(Some(auth)) => codex_core::AuthManager::from_auth_for_testing(auth),
-        Ok(None) => panic!("No CodexAuth found in codex_home"),
+        Ok(None) => panic!("No CodexAuth found in edgar_home"),
         Err(e) => panic!("Failed to load CodexAuth: {e}"),
     };
     let conversation_manager = ConversationManager::new(auth_manager);
@@ -578,8 +578,8 @@ async fn includes_user_instructions_message_in_request() {
         ..built_in_model_providers()["openai"].clone()
     };
 
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = model_provider;
     config.user_instructions = Some("be nice".to_string());
 
@@ -656,8 +656,8 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         requires_openai_auth: false,
     };
 
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider_id = provider.name.clone();
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort;
@@ -1034,8 +1034,8 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
     };
 
     // Init session
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = provider;
 
     let conversation_manager = ConversationManager::with_auth(create_dummy_codex_auth());
@@ -1111,8 +1111,8 @@ async fn env_var_overrides_loaded_auth() {
     };
 
     // Init session
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = provider;
 
     let conversation_manager = ConversationManager::with_auth(create_dummy_codex_auth());
@@ -1185,8 +1185,8 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
     };
 
     // Init session with isolated codex home.
-    let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home);
+    let edgar_home = TempDir::new().unwrap();
+    let mut config = load_default_config_for_test(&edgar_home);
     config.model_provider = model_provider;
 
     let conversation_manager =

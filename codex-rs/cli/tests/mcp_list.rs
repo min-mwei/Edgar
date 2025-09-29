@@ -7,17 +7,17 @@ use serde_json::Value as JsonValue;
 use serde_json::json;
 use tempfile::TempDir;
 
-fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
-    let mut cmd = assert_cmd::Command::cargo_bin("codex")?;
-    cmd.env("CODEX_HOME", codex_home);
+fn edgar_command(edgar_home: &Path) -> Result<assert_cmd::Command> {
+    let mut cmd = assert_cmd::Command::cargo_bin("edgar")?;
+    cmd.env("CODEX_HOME", edgar_home);
     Ok(cmd)
 }
 
 #[test]
 fn list_shows_empty_state() -> Result<()> {
-    let codex_home = TempDir::new()?;
+    let edgar_home = TempDir::new()?;
 
-    let mut cmd = codex_command(codex_home.path())?;
+    let mut cmd = edgar_command(edgar_home.path())?;
     let output = cmd.args(["mcp", "list"]).output()?;
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout)?;
@@ -28,9 +28,9 @@ fn list_shows_empty_state() -> Result<()> {
 
 #[test]
 fn list_and_get_render_expected_output() -> Result<()> {
-    let codex_home = TempDir::new()?;
+    let edgar_home = TempDir::new()?;
 
-    let mut add = codex_command(codex_home.path())?;
+    let mut add = edgar_command(edgar_home.path())?;
     add.args([
         "mcp",
         "add",
@@ -45,7 +45,7 @@ fn list_and_get_render_expected_output() -> Result<()> {
     .assert()
     .success();
 
-    let mut list_cmd = codex_command(codex_home.path())?;
+    let mut list_cmd = edgar_command(edgar_home.path())?;
     let list_output = list_cmd.args(["mcp", "list"]).output()?;
     assert!(list_output.status.success());
     let stdout = String::from_utf8(list_output.stdout)?;
@@ -54,7 +54,7 @@ fn list_and_get_render_expected_output() -> Result<()> {
     assert!(stdout.contains("docs-server"));
     assert!(stdout.contains("TOKEN=secret"));
 
-    let mut list_json_cmd = codex_command(codex_home.path())?;
+    let mut list_json_cmd = edgar_command(edgar_home.path())?;
     let json_output = list_json_cmd.args(["mcp", "list", "--json"]).output()?;
     assert!(json_output.status.success());
     let stdout = String::from_utf8(json_output.stdout)?;
@@ -82,7 +82,7 @@ fn list_and_get_render_expected_output() -> Result<()> {
         )
     );
 
-    let mut get_cmd = codex_command(codex_home.path())?;
+    let mut get_cmd = edgar_command(edgar_home.path())?;
     let get_output = get_cmd.args(["mcp", "get", "docs"]).output()?;
     assert!(get_output.status.success());
     let stdout = String::from_utf8(get_output.stdout)?;
@@ -91,9 +91,9 @@ fn list_and_get_render_expected_output() -> Result<()> {
     assert!(stdout.contains("command: docs-server"));
     assert!(stdout.contains("args: --port 4000"));
     assert!(stdout.contains("env: TOKEN=secret"));
-    assert!(stdout.contains("remove: codex mcp remove docs"));
+    assert!(stdout.contains("remove: edgar mcp remove docs"));
 
-    let mut get_json_cmd = codex_command(codex_home.path())?;
+    let mut get_json_cmd = edgar_command(edgar_home.path())?;
     get_json_cmd
         .args(["mcp", "get", "docs", "--json"])
         .assert()

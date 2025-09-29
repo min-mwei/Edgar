@@ -48,7 +48,7 @@ async fn chat_mode_stream_cli() {
     let mut cmd = AssertCommand::new("cargo");
     cmd.arg("run")
         .arg("-p")
-        .arg("codex-cli")
+        .arg("edgar-cli")
         .arg("--quiet")
         .arg("--")
         .arg("exec")
@@ -136,7 +136,7 @@ async fn exec_cli_applies_experimental_instructions_file() {
     let mut cmd = AssertCommand::new("cargo");
     cmd.arg("run")
         .arg("-p")
-        .arg("codex-cli")
+        .arg("edgar-cli")
         .arg("--quiet")
         .arg("--")
         .arg("exec")
@@ -194,7 +194,7 @@ async fn responses_api_stream_cli() {
     let mut cmd = AssertCommand::new("cargo");
     cmd.arg("run")
         .arg("-p")
-        .arg("codex-cli")
+        .arg("edgar-cli")
         .arg("--quiet")
         .arg("--")
         .arg("exec")
@@ -230,12 +230,12 @@ async fn integration_creates_and_checks_session_file() {
     let fixture =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cli_responses_fixture.sse");
 
-    // 4. Run the codex CLI through cargo (ensures the right bin is built) and invoke `exec`,
+    // 4. Run the edgar CLI through cargo (ensures the right bin is built) and invoke `exec`,
     //    which is what records a session.
     let mut cmd = AssertCommand::new("cargo");
     cmd.arg("run")
         .arg("-p")
-        .arg("codex-cli")
+        .arg("edgar-cli")
         .arg("--quiet")
         .arg("--")
         .arg("exec")
@@ -252,7 +252,7 @@ async fn integration_creates_and_checks_session_file() {
     let output = cmd.output().unwrap();
     assert!(
         output.status.success(),
-        "codex-cli exec failed: {}",
+        "edgar-cli exec failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
 
@@ -403,7 +403,7 @@ async fn integration_creates_and_checks_session_file() {
     let mut cmd2 = AssertCommand::new("cargo");
     cmd2.arg("run")
         .arg("-p")
-        .arg("codex-cli")
+        .arg("edgar-cli")
         .arg("--quiet")
         .arg("--")
         .arg("exec")
@@ -419,7 +419,7 @@ async fn integration_creates_and_checks_session_file() {
         .env("OPENAI_BASE_URL", "http://unused.local");
 
     let output2 = cmd2.output().unwrap();
-    assert!(output2.status.success(), "resume codex-cli run failed");
+    assert!(output2.status.success(), "resume edgar-cli run failed");
 
     // Find the new session file containing the resumed marker.
     let deadline = Instant::now() + Duration::from_secs(10);

@@ -29,11 +29,11 @@ async fn test_conversation_create_and_send_message_ok() {
     let server = create_mock_chat_completions_server(responses).await;
 
     // Temporary Codex home with config pointing at the mock server.
-    let codex_home = TempDir::new().expect("create temp dir");
-    create_config_toml(codex_home.path(), &server.uri()).expect("write config.toml");
+    let edgar_home = TempDir::new().expect("create temp dir");
+    create_config_toml(edgar_home.path(), &server.uri()).expect("write config.toml");
 
     // Start MCP server process and initialize.
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
@@ -133,8 +133,8 @@ async fn test_conversation_create_and_send_message_ok() {
 }
 
 // Helper to create a config.toml pointing at the mock model server.
-fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
-    let config_toml = codex_home.join("config.toml");
+fn create_config_toml(edgar_home: &Path, server_uri: &str) -> std::io::Result<()> {
+    let config_toml = edgar_home.join("config.toml");
     std::fs::write(
         config_toml,
         format!(

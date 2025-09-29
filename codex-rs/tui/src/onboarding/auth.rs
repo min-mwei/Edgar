@@ -128,7 +128,7 @@ pub(crate) struct AuthModeWidget {
     pub highlighted_mode: AuthMode,
     pub error: Option<String>,
     pub sign_in_state: Arc<RwLock<SignInState>>,
-    pub codex_home: PathBuf,
+    pub edgar_home: PathBuf,
     pub login_status: LoginStatus,
     pub auth_manager: Arc<AuthManager>,
 }
@@ -454,7 +454,7 @@ impl AuthModeWidget {
     }
 
     fn save_api_key(&mut self, api_key: String) {
-        match login_with_api_key(&self.codex_home, &api_key) {
+        match login_with_api_key(&self.edgar_home, &api_key) {
             Ok(()) => {
                 self.error = None;
                 self.login_status = LoginStatus::AuthMode(AuthMode::ApiKey);
@@ -491,7 +491,7 @@ impl AuthModeWidget {
         }
 
         self.error = None;
-        let opts = ServerOptions::new(self.codex_home.clone(), CLIENT_ID.to_string());
+        let opts = ServerOptions::new(self.edgar_home.clone(), CLIENT_ID.to_string());
         match run_login_server(opts) {
             Ok(child) => {
                 let sign_in_state = self.sign_in_state.clone();

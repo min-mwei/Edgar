@@ -44,7 +44,7 @@ pub enum ResumeSelection {
 
 #[derive(Clone)]
 struct PageLoadRequest {
-    codex_home: PathBuf,
+    edgar_home: PathBuf,
     cursor: Option<Cursor>,
     request_token: usize,
     search_token: Option<usize>,
@@ -63,7 +63,7 @@ enum BackgroundEvent {
 /// Interactive session picker that lists recorded rollout files with simple
 /// search and pagination. Shows the first user input as the preview, relative
 /// time (e.g., "5 seconds ago"), and the absolute path.
-pub async fn run_resume_picker(tui: &mut Tui, codex_home: &Path) -> Result<ResumeSelection> {
+pub async fn run_resume_picker(tui: &mut Tui, edgar_home: &Path) -> Result<ResumeSelection> {
     let alt = AltScreenGuard::enter(tui);
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
 
@@ -72,7 +72,7 @@ pub async fn run_resume_picker(tui: &mut Tui, codex_home: &Path) -> Result<Resum
         let tx = loader_tx.clone();
         tokio::spawn(async move {
             let page = RolloutRecorder::list_conversations(
-                &request.codex_home,
+                &request.edgar_home,
                 PAGE_SIZE,
                 request.cursor.as_ref(),
             )
@@ -86,7 +86,7 @@ pub async fn run_resume_picker(tui: &mut Tui, codex_home: &Path) -> Result<Resum
     });
 
     let mut state = PickerState::new(
-        codex_home.to_path_buf(),
+        edgar_home.to_path_buf(),
         alt.tui.frame_requester(),
         page_loader,
     );
@@ -149,7 +149,7 @@ impl Drop for AltScreenGuard<'_> {
 }
 
 struct PickerState {
-    codex_home: PathBuf,
+    edgar_home: PathBuf,
     requester: FrameRequester,
     pagination: PaginationState,
     all_rows: Vec<Row>,
@@ -222,9 +222,9 @@ struct Row {
 }
 
 impl PickerState {
-    fn new(codex_home: PathBuf, requester: FrameRequester, page_loader: PageLoader) -> Self {
+    fn new(edgar_home: PathBuf, requester: FrameRequester, page_loader: PageLoader) -> Self {
         Self {
-            codex_home,
+            edgar_home,
             requester,
             pagination: PaginationState {
                 next_cursor: None,
@@ -321,7 +321,7 @@ impl PickerState {
     }
 
     async fn load_initial_page(&mut self) -> Result<()> {
-        let page = RolloutRecorder::list_conversations(&self.codex_home, PAGE_SIZE, None).await?;
+        let page = RolloutRecorder::list_conversations(&self.edgar_home, PAGE_SIZE, None).await?;
         self.reset_pagination();
         self.all_rows.clear();
         self.filtered_rows.clear();
@@ -539,7 +539,7 @@ impl PickerState {
         self.request_frame();
 
         (self.page_loader)(PageLoadRequest {
-            codex_home: self.codex_home.clone(),
+            edgar_home: self.edgar_home.clone(),
             cursor: Some(cursor),
             request_token,
             search_token,

@@ -55,8 +55,8 @@ pub struct McpProcess {
 }
 
 impl McpProcess {
-    pub async fn new(codex_home: &Path) -> anyhow::Result<Self> {
-        Self::new_with_env(codex_home, &[]).await
+    pub async fn new(edgar_home: &Path) -> anyhow::Result<Self> {
+        Self::new_with_env(edgar_home, &[]).await
     }
 
     /// Creates a new MCP process, allowing tests to override or remove
@@ -65,7 +65,7 @@ impl McpProcess {
     /// Pass a tuple of (key, Some(value)) to set/override, or (key, None) to
     /// remove a variable from the child's environment.
     pub async fn new_with_env(
-        codex_home: &Path,
+        edgar_home: &Path,
         env_overrides: &[(&str, Option<&str>)],
     ) -> anyhow::Result<Self> {
         // Use assert_cmd to locate the binary path and then switch to tokio::process::Command
@@ -79,7 +79,7 @@ impl McpProcess {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
-        cmd.env("CODEX_HOME", codex_home);
+        cmd.env("CODEX_HOME", edgar_home);
         cmd.env("RUST_LOG", "debug");
 
         for (k, v) in env_overrides {

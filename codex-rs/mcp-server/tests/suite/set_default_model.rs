@@ -15,10 +15,10 @@ const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn set_default_model_persists_overrides() {
-    let codex_home = TempDir::new().expect("create tempdir");
-    create_config_toml(codex_home.path()).expect("write config.toml");
+    let edgar_home = TempDir::new().expect("create tempdir");
+    create_config_toml(edgar_home.path()).expect("write config.toml");
 
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
@@ -47,7 +47,7 @@ async fn set_default_model_persists_overrides() {
     let _: SetDefaultModelResponse =
         to_response(resp).expect("deserialize setDefaultModel response");
 
-    let config_path = codex_home.path().join("config.toml");
+    let config_path = edgar_home.path().join("config.toml");
     let config_contents = tokio::fs::read_to_string(&config_path)
         .await
         .expect("read config.toml");
@@ -64,8 +64,8 @@ async fn set_default_model_persists_overrides() {
 }
 
 // Helper to create a config.toml; mirrors create_conversation.rs
-fn create_config_toml(codex_home: &Path) -> std::io::Result<()> {
-    let config_toml = codex_home.join("config.toml");
+fn create_config_toml(edgar_home: &Path) -> std::io::Result<()> {
+    let config_toml = edgar_home.join("config.toml");
     std::fs::write(
         config_toml,
         r#"

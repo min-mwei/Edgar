@@ -16,10 +16,10 @@ const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn archive_conversation_moves_rollout_into_archived_directory() {
-    let codex_home = TempDir::new().expect("create temp dir");
-    create_config_toml(codex_home.path()).expect("write config.toml");
+    let edgar_home = TempDir::new().expect("create temp dir");
+    create_config_toml(edgar_home.path()).expect("write config.toml");
 
-    let mut mcp = McpProcess::new(codex_home.path())
+    let mut mcp = McpProcess::new(edgar_home.path())
         .await
         .expect("spawn mcp process");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
@@ -74,7 +74,7 @@ async fn archive_conversation_moves_rollout_into_archived_directory() {
         to_response::<ArchiveConversationResponse>(archive_response)
             .expect("deserialize archiveConversation response");
 
-    let archived_directory = codex_home.path().join(ARCHIVED_SESSIONS_SUBDIR);
+    let archived_directory = edgar_home.path().join(ARCHIVED_SESSIONS_SUBDIR);
     let archived_rollout_path =
         archived_directory.join(rollout_path.file_name().unwrap_or_else(|| {
             panic!("rollout path {} missing file name", rollout_path.display())
@@ -92,8 +92,8 @@ async fn archive_conversation_moves_rollout_into_archived_directory() {
     );
 }
 
-fn create_config_toml(codex_home: &Path) -> std::io::Result<()> {
-    let config_toml = codex_home.join("config.toml");
+fn create_config_toml(edgar_home: &Path) -> std::io::Result<()> {
+    let config_toml = edgar_home.join("config.toml");
     std::fs::write(config_toml, config_contents())
 }
 

@@ -104,7 +104,7 @@ pub struct Config {
     /// appends one extra argument containing a JSON payload describing the
     /// event.
     ///
-    /// Example `~/.codex/config.toml` snippet:
+    /// Example `~/.edgar/config.toml` snippet:
     ///
     /// ```toml
     /// notify = ["notify-send", "Codex"]
@@ -137,11 +137,11 @@ pub struct Config {
     /// Maximum number of bytes to include from an AGENTS.md project doc file.
     pub project_doc_max_bytes: usize,
 
-    /// Directory containing all Codex state (defaults to `~/.codex` but can be
+    /// Directory containing all Codex state (defaults to `~/.edgar` but can be
     /// overridden by the `CODEX_HOME` environment variable).
-    pub codex_home: PathBuf,
+    pub edgar_home: PathBuf,
 
-    /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
+    /// Settings that govern if and what will be written to `~/.edgar/history.jsonl`.
     pub history: History,
 
     /// Optional URI-based file opener. If set, citations to files in the model
@@ -212,13 +212,13 @@ impl Config {
         cli_overrides: Vec<(String, TomlValue)>,
         overrides: ConfigOverrides,
     ) -> std::io::Result<Self> {
-        // Resolve the directory that stores Codex state (e.g. ~/.codex or the
+        // Resolve the directory that stores Codex state (e.g. ~/.edgar or the
         // value of $CODEX_HOME) so we can embed it into the resulting
         // `Config` instance.
-        let codex_home = find_codex_home()?;
+        let edgar_home = find_edgar_home()?;
 
         // Step 1: parse `config.toml` into a generic JSON value.
-        let mut root_value = load_config_as_toml(&codex_home)?;
+        let mut root_value = load_config_as_toml(&edgar_home)?;
 
         // Step 2: apply the `-c` overrides.
         for (path, value) in cli_overrides.into_iter() {
@@ -233,15 +233,15 @@ impl Config {
         })?;
 
         // Step 4: merge with the strongly-typed overrides.
-        Self::load_from_base_config_with_overrides(cfg, overrides, codex_home)
+        Self::load_from_base_config_with_overrides(cfg, overrides, edgar_home)
     }
 }
 
 pub fn load_config_as_toml_with_cli_overrides(
-    codex_home: &Path,
+    edgar_home: &Path,
     cli_overrides: Vec<(String, TomlValue)>,
 ) -> std::io::Result<ConfigToml> {
-    let mut root_value = load_config_as_toml(codex_home)?;
+    let mut root_value = load_config_as_toml(edgar_home)?;
 
     for (path, value) in cli_overrides.into_iter() {
         apply_toml_override(&mut root_value, &path, value);
@@ -257,8 +257,8 @@ pub fn load_config_as_toml_with_cli_overrides(
 
 /// Read `CODEX_HOME/config.toml` and return it as a generic TOML value. Returns
 /// an empty TOML table when the file does not exist.
-pub fn load_config_as_toml(codex_home: &Path) -> std::io::Result<TomlValue> {
-    let config_path = codex_home.join(CONFIG_TOML_FILE);
+pub fn load_config_as_toml(edgar_home: &Path) -> std::io::Result<TomlValue> {
+    let config_path = edgar_home.join(CONFIG_TOML_FILE);
     match std::fs::read_to_string(&config_path) {
         Ok(contents) => match toml::from_str::<TomlValue>(&contents) {
             Ok(val) => Ok(val),
@@ -279,9 +279,9 @@ pub fn load_config_as_toml(codex_home: &Path) -> std::io::Result<TomlValue> {
 }
 
 pub fn load_global_mcp_servers(
-    codex_home: &Path,
+    edgar_home: &Path,
 ) -> std::io::Result<BTreeMap<String, McpServerConfig>> {
-    let root_value = load_config_as_toml(codex_home)?;
+    let root_value = load_config_as_toml(edgar_home)?;
     let Some(servers_value) = root_value.get("mcp_servers") else {
         return Ok(BTreeMap::new());
     };
@@ -293,10 +293,10 @@ pub fn load_global_mcp_servers(
 }
 
 pub fn write_global_mcp_servers(
-    codex_home: &Path,
+    edgar_home: &Path,
     servers: &BTreeMap<String, McpServerConfig>,
 ) -> std::io::Result<()> {
-    let config_path = codex_home.join(CONFIG_TOML_FILE);
+    let config_path = edgar_home.join(CONFIG_TOML_FILE);
     let mut doc = match std::fs::read_to_string(&config_path) {
         Ok(contents) => contents
             .parse::<DocumentMut>()
@@ -360,8 +360,8 @@ pub fn write_global_mcp_servers(
         }
     }
 
-    std::fs::create_dir_all(codex_home)?;
-    let tmp_file = NamedTempFile::new_in(codex_home)?;
+    std::fs::create_dir_all(edgar_home)?;
+    let tmp_file = NamedTempFile::new_in(edgar_home)?;
     std::fs::write(tmp_file.path(), doc.to_string())?;
     tmp_file.persist(config_path).map_err(|err| err.error)?;
 
@@ -435,8 +435,8 @@ fn set_project_trusted_inner(doc: &mut DocumentMut, project_path: &Path) -> anyh
 
 /// Patch `CODEX_HOME/config.toml` project state.
 /// Use with caution.
-pub fn set_project_trusted(codex_home: &Path, project_path: &Path) -> anyhow::Result<()> {
-    let config_path = codex_home.join(CONFIG_TOML_FILE);
+pub fn set_project_trusted(edgar_home: &Path, project_path: &Path) -> anyhow::Result<()> {
+    let config_path = edgar_home.join(CONFIG_TOML_FILE);
     // Parse existing config if present; otherwise start a new document.
     let mut doc = match std::fs::read_to_string(config_path.clone()) {
         Ok(s) => s.parse::<DocumentMut>()?,
@@ -446,11 +446,11 @@ pub fn set_project_trusted(codex_home: &Path, project_path: &Path) -> anyhow::Re
 
     set_project_trusted_inner(&mut doc, project_path)?;
 
-    // ensure codex_home exists
-    std::fs::create_dir_all(codex_home)?;
+    // ensure edgar_home exists
+    std::fs::create_dir_all(edgar_home)?;
 
     // create a tmp_file
-    let tmp_file = NamedTempFile::new_in(codex_home)?;
+    let tmp_file = NamedTempFile::new_in(edgar_home)?;
     std::fs::write(tmp_file.path(), doc.to_string())?;
 
     // atomically move the tmp file into config.toml
@@ -511,12 +511,12 @@ fn ensure_profile_table<'a>(
 
 // TODO(jif) refactor config persistence.
 pub async fn persist_model_selection(
-    codex_home: &Path,
+    edgar_home: &Path,
     active_profile: Option<&str>,
     model: &str,
     effort: Option<ReasoningEffort>,
 ) -> anyhow::Result<()> {
-    let config_path = codex_home.join(CONFIG_TOML_FILE);
+    let config_path = edgar_home.join(CONFIG_TOML_FILE);
     let serialized = match tokio::fs::read_to_string(&config_path).await {
         Ok(contents) => contents,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
@@ -554,12 +554,12 @@ pub async fn persist_model_selection(
     }
 
     // TODO(jif) refactor the home creation
-    tokio::fs::create_dir_all(codex_home)
+    tokio::fs::create_dir_all(edgar_home)
         .await
         .with_context(|| {
             format!(
                 "failed to create Codex home directory at {}",
-                codex_home.display()
+                edgar_home.display()
             )
         })?;
 
@@ -613,7 +613,7 @@ fn apply_toml_override(root: &mut TomlValue, path: &str, value: TomlValue) {
     }
 }
 
-/// Base config deserialized from ~/.codex/config.toml.
+/// Base config deserialized from ~/.edgar/config.toml.
 #[derive(Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct ConfigToml {
     /// Optional override of model selection.
@@ -670,7 +670,7 @@ pub struct ConfigToml {
     #[serde(default)]
     pub profiles: HashMap<String, ConfigProfile>,
 
-    /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
+    /// Settings that govern if and what will be written to `~/.edgar/history.jsonl`.
     #[serde(default)]
     pub history: Option<History>,
 
@@ -867,9 +867,9 @@ impl Config {
     pub fn load_from_base_config_with_overrides(
         cfg: ConfigToml,
         overrides: ConfigOverrides,
-        codex_home: PathBuf,
+        edgar_home: PathBuf,
     ) -> std::io::Result<Self> {
-        let user_instructions = Self::load_instructions(Some(&codex_home));
+        let user_instructions = Self::load_instructions(Some(&edgar_home));
 
         // Destructure ConfigOverrides fully to ensure all overrides are applied.
         let ConfigOverrides {
@@ -1028,7 +1028,7 @@ impl Config {
             mcp_servers: cfg.mcp_servers,
             model_providers,
             project_doc_max_bytes: cfg.project_doc_max_bytes.unwrap_or(PROJECT_DOC_MAX_BYTES),
-            codex_home,
+            edgar_home,
             history,
             file_opener: cfg.file_opener.unwrap_or(UriBasedFileOpener::VsCode),
             codex_linux_sandbox_exe,
@@ -1140,21 +1140,26 @@ fn default_review_model() -> String {
     OPENAI_DEFAULT_REVIEW_MODEL.to_string()
 }
 
-/// Returns the path to the Codex configuration directory, which can be
+/// Returns the path to the Edgar configuration directory, which can be
 /// specified by the `CODEX_HOME` environment variable. If not set, defaults to
-/// `~/.codex`.
+/// `~/.edgar`.
 ///
-/// - If `CODEX_HOME` is set, the value will be canonicalized and this
-///   function will Err if the path does not exist.
-/// - If `CODEX_HOME` is not set, this function does not verify that the
-///   directory exists.
-pub fn find_codex_home() -> std::io::Result<PathBuf> {
+/// The directory is created automatically if it does not already exist so
+/// first-run experience works without manual setup.
+pub fn find_edgar_home() -> std::io::Result<PathBuf> {
+    use std::fs;
+
     // Honor the `CODEX_HOME` environment variable when it is set to allow users
     // (and tests) to override the default location.
     if let Ok(val) = std::env::var("CODEX_HOME")
         && !val.is_empty()
     {
-        return PathBuf::from(val).canonicalize();
+        let path = PathBuf::from(val);
+        if !path.exists() {
+            fs::create_dir_all(&path)?;
+            return Ok(path);
+        }
+        return path.canonicalize().or(Ok(path));
     }
 
     let mut p = home_dir().ok_or_else(|| {
@@ -1163,14 +1168,19 @@ pub fn find_codex_home() -> std::io::Result<PathBuf> {
             "Could not find home directory",
         )
     })?;
-    p.push(".codex");
-    Ok(p)
+    p.push(".edgar");
+    if !p.exists() {
+        fs::create_dir_all(&p)?;
+        return Ok(p);
+    }
+
+    p.canonicalize().or(Ok(p))
 }
 
 /// Returns the path to the folder where Codex logs are stored. Does not verify
 /// that the directory exists.
 pub fn log_dir(cfg: &Config) -> std::io::Result<PathBuf> {
-    let mut p = cfg.codex_home.clone();
+    let mut p = cfg.edgar_home.clone();
     p.push("log");
     Ok(p)
 }
@@ -1289,9 +1299,9 @@ exclude_slash_tmp = true
 
     #[test]
     fn load_global_mcp_servers_returns_empty_if_missing() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
+        let edgar_home = TempDir::new()?;
 
-        let servers = load_global_mcp_servers(codex_home.path())?;
+        let servers = load_global_mcp_servers(edgar_home.path())?;
         assert!(servers.is_empty());
 
         Ok(())
@@ -1299,7 +1309,7 @@ exclude_slash_tmp = true
 
     #[test]
     fn write_global_mcp_servers_round_trips_entries() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
+        let edgar_home = TempDir::new()?;
 
         let mut servers = BTreeMap::new();
         servers.insert(
@@ -1315,9 +1325,9 @@ exclude_slash_tmp = true
             },
         );
 
-        write_global_mcp_servers(codex_home.path(), &servers)?;
+        write_global_mcp_servers(edgar_home.path(), &servers)?;
 
-        let loaded = load_global_mcp_servers(codex_home.path())?;
+        let loaded = load_global_mcp_servers(edgar_home.path())?;
         assert_eq!(loaded.len(), 1);
         let docs = loaded.get("docs").expect("docs entry");
         match &docs.transport {
@@ -1332,8 +1342,8 @@ exclude_slash_tmp = true
         assert_eq!(docs.tool_timeout_sec, Some(Duration::from_secs(5)));
 
         let empty = BTreeMap::new();
-        write_global_mcp_servers(codex_home.path(), &empty)?;
-        let loaded = load_global_mcp_servers(codex_home.path())?;
+        write_global_mcp_servers(edgar_home.path(), &empty)?;
+        let loaded = load_global_mcp_servers(edgar_home.path())?;
         assert!(loaded.is_empty());
 
         Ok(())
@@ -1341,8 +1351,8 @@ exclude_slash_tmp = true
 
     #[test]
     fn load_global_mcp_servers_accepts_legacy_ms_field() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
-        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        let edgar_home = TempDir::new()?;
+        let config_path = edgar_home.path().join(CONFIG_TOML_FILE);
 
         std::fs::write(
             &config_path,
@@ -1354,7 +1364,7 @@ startup_timeout_ms = 2500
 "#,
         )?;
 
-        let servers = load_global_mcp_servers(codex_home.path())?;
+        let servers = load_global_mcp_servers(edgar_home.path())?;
         let docs = servers.get("docs").expect("docs entry");
         assert_eq!(docs.startup_timeout_sec, Some(Duration::from_millis(2500)));
 
@@ -1363,7 +1373,7 @@ startup_timeout_ms = 2500
 
     #[test]
     fn write_global_mcp_servers_serializes_env_sorted() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
+        let edgar_home = TempDir::new()?;
 
         let servers = BTreeMap::from([(
             "docs".to_string(),
@@ -1381,9 +1391,9 @@ startup_timeout_ms = 2500
             },
         )]);
 
-        write_global_mcp_servers(codex_home.path(), &servers)?;
+        write_global_mcp_servers(edgar_home.path(), &servers)?;
 
-        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        let config_path = edgar_home.path().join(CONFIG_TOML_FILE);
         let serialized = std::fs::read_to_string(&config_path)?;
         assert_eq!(
             serialized,
@@ -1397,7 +1407,7 @@ ZIG_VAR = "3"
 "#
         );
 
-        let loaded = load_global_mcp_servers(codex_home.path())?;
+        let loaded = load_global_mcp_servers(edgar_home.path())?;
         let docs = loaded.get("docs").expect("docs entry");
         match &docs.transport {
             McpServerTransportConfig::Stdio { command, args, env } => {
@@ -1417,7 +1427,7 @@ ZIG_VAR = "3"
 
     #[test]
     fn write_global_mcp_servers_serializes_streamable_http() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
+        let edgar_home = TempDir::new()?;
 
         let mut servers = BTreeMap::from([(
             "docs".to_string(),
@@ -1431,9 +1441,9 @@ ZIG_VAR = "3"
             },
         )]);
 
-        write_global_mcp_servers(codex_home.path(), &servers)?;
+        write_global_mcp_servers(edgar_home.path(), &servers)?;
 
-        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        let config_path = edgar_home.path().join(CONFIG_TOML_FILE);
         let serialized = std::fs::read_to_string(&config_path)?;
         assert_eq!(
             serialized,
@@ -1444,7 +1454,7 @@ startup_timeout_sec = 2.0
 "#
         );
 
-        let loaded = load_global_mcp_servers(codex_home.path())?;
+        let loaded = load_global_mcp_servers(edgar_home.path())?;
         let docs = loaded.get("docs").expect("docs entry");
         match &docs.transport {
             McpServerTransportConfig::StreamableHttp { url, bearer_token } => {
@@ -1466,7 +1476,7 @@ startup_timeout_sec = 2.0
                 tool_timeout_sec: None,
             },
         );
-        write_global_mcp_servers(codex_home.path(), &servers)?;
+        write_global_mcp_servers(edgar_home.path(), &servers)?;
 
         let serialized = std::fs::read_to_string(&config_path)?;
         assert_eq!(
@@ -1476,7 +1486,7 @@ url = "https://example.com/mcp"
 "#
         );
 
-        let loaded = load_global_mcp_servers(codex_home.path())?;
+        let loaded = load_global_mcp_servers(edgar_home.path())?;
         let docs = loaded.get("docs").expect("docs entry");
         match &docs.transport {
             McpServerTransportConfig::StreamableHttp { url, bearer_token } => {
@@ -1491,10 +1501,10 @@ url = "https://example.com/mcp"
 
     #[tokio::test]
     async fn persist_model_selection_updates_defaults() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
+        let edgar_home = TempDir::new()?;
 
         persist_model_selection(
-            codex_home.path(),
+            edgar_home.path(),
             None,
             "gpt-5-codex",
             Some(ReasoningEffort::High),
@@ -1502,7 +1512,7 @@ url = "https://example.com/mcp"
         .await?;
 
         let serialized =
-            tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+            tokio::fs::read_to_string(edgar_home.path().join(CONFIG_TOML_FILE)).await?;
         let parsed: ConfigToml = toml::from_str(&serialized)?;
 
         assert_eq!(parsed.model.as_deref(), Some("gpt-5-codex"));
@@ -1513,8 +1523,8 @@ url = "https://example.com/mcp"
 
     #[tokio::test]
     async fn persist_model_selection_overwrites_existing_model() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
-        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        let edgar_home = TempDir::new()?;
+        let config_path = edgar_home.path().join(CONFIG_TOML_FILE);
 
         tokio::fs::write(
             &config_path,
@@ -1529,7 +1539,7 @@ model = "gpt-4.1"
         .await?;
 
         persist_model_selection(
-            codex_home.path(),
+            edgar_home.path(),
             None,
             "o4-mini",
             Some(ReasoningEffort::High),
@@ -1554,10 +1564,10 @@ model = "gpt-4.1"
 
     #[tokio::test]
     async fn persist_model_selection_updates_profile() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
+        let edgar_home = TempDir::new()?;
 
         persist_model_selection(
-            codex_home.path(),
+            edgar_home.path(),
             Some("dev"),
             "gpt-5-codex",
             Some(ReasoningEffort::Medium),
@@ -1565,7 +1575,7 @@ model = "gpt-4.1"
         .await?;
 
         let serialized =
-            tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+            tokio::fs::read_to_string(edgar_home.path().join(CONFIG_TOML_FILE)).await?;
         let parsed: ConfigToml = toml::from_str(&serialized)?;
         let profile = parsed
             .profiles
@@ -1583,8 +1593,8 @@ model = "gpt-4.1"
 
     #[tokio::test]
     async fn persist_model_selection_updates_existing_profile() -> anyhow::Result<()> {
-        let codex_home = TempDir::new()?;
-        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        let edgar_home = TempDir::new()?;
+        let config_path = edgar_home.path().join(CONFIG_TOML_FILE);
 
         tokio::fs::write(
             &config_path,
@@ -1600,7 +1610,7 @@ model = "gpt-5-codex"
         .await?;
 
         persist_model_selection(
-            codex_home.path(),
+            edgar_home.path(),
             Some("dev"),
             "o4-high",
             Some(ReasoningEffort::Medium),
@@ -1633,7 +1643,7 @@ model = "gpt-5-codex"
 
     struct PrecedenceTestFixture {
         cwd: TempDir,
-        codex_home: TempDir,
+        edgar_home: TempDir,
         cfg: ConfigToml,
         model_provider_map: HashMap<String, ModelProviderInfo>,
         openai_provider: ModelProviderInfo,
@@ -1645,8 +1655,8 @@ model = "gpt-5-codex"
             self.cwd.path().to_path_buf()
         }
 
-        fn codex_home(&self) -> PathBuf {
-            self.codex_home.path().to_path_buf()
+        fn edgar_home(&self) -> PathBuf {
+            self.edgar_home.path().to_path_buf()
         }
     }
 
@@ -1703,7 +1713,7 @@ model_verbosity = "high"
         // a parent folder, either.
         std::fs::write(cwd.join(".git"), "gitdir: nowhere")?;
 
-        let codex_home_temp_dir = TempDir::new().unwrap();
+        let edgar_home_temp_dir = TempDir::new().unwrap();
 
         let openai_chat_completions_provider = ModelProviderInfo {
             name: "OpenAI using Chat Completions".to_string(),
@@ -1735,7 +1745,7 @@ model_verbosity = "high"
 
         Ok(PrecedenceTestFixture {
             cwd: cwd_temp_dir,
-            codex_home: codex_home_temp_dir,
+            edgar_home: edgar_home_temp_dir,
             cfg,
             model_provider_map,
             openai_provider,
@@ -1767,7 +1777,7 @@ model_verbosity = "high"
         let o3_profile_config: Config = Config::load_from_base_config_with_overrides(
             fixture.cfg.clone(),
             o3_profile_overrides,
-            fixture.codex_home(),
+            fixture.edgar_home(),
         )?;
         assert_eq!(
             Config {
@@ -1788,7 +1798,7 @@ model_verbosity = "high"
                 mcp_servers: HashMap::new(),
                 model_providers: fixture.model_provider_map.clone(),
                 project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
-                codex_home: fixture.codex_home(),
+                edgar_home: fixture.edgar_home(),
                 history: History::default(),
                 file_opener: UriBasedFileOpener::VsCode,
                 codex_linux_sandbox_exe: None,
@@ -1827,7 +1837,7 @@ model_verbosity = "high"
         let gpt3_profile_config = Config::load_from_base_config_with_overrides(
             fixture.cfg.clone(),
             gpt3_profile_overrides,
-            fixture.codex_home(),
+            fixture.edgar_home(),
         )?;
         let expected_gpt3_profile_config = Config {
             model: "gpt-3.5-turbo".to_string(),
@@ -1847,7 +1857,7 @@ model_verbosity = "high"
             mcp_servers: HashMap::new(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
-            codex_home: fixture.codex_home(),
+            edgar_home: fixture.edgar_home(),
             history: History::default(),
             file_opener: UriBasedFileOpener::VsCode,
             codex_linux_sandbox_exe: None,
@@ -1882,7 +1892,7 @@ model_verbosity = "high"
         let default_profile_config = Config::load_from_base_config_with_overrides(
             fixture.cfg.clone(),
             default_profile_overrides,
-            fixture.codex_home(),
+            fixture.edgar_home(),
         )?;
 
         assert_eq!(expected_gpt3_profile_config, default_profile_config);
@@ -1901,7 +1911,7 @@ model_verbosity = "high"
         let zdr_profile_config = Config::load_from_base_config_with_overrides(
             fixture.cfg.clone(),
             zdr_profile_overrides,
-            fixture.codex_home(),
+            fixture.edgar_home(),
         )?;
         let expected_zdr_profile_config = Config {
             model: "o3".to_string(),
@@ -1921,7 +1931,7 @@ model_verbosity = "high"
             mcp_servers: HashMap::new(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
-            codex_home: fixture.codex_home(),
+            edgar_home: fixture.edgar_home(),
             history: History::default(),
             file_opener: UriBasedFileOpener::VsCode,
             codex_linux_sandbox_exe: None,
@@ -1961,7 +1971,7 @@ model_verbosity = "high"
         let gpt5_profile_config = Config::load_from_base_config_with_overrides(
             fixture.cfg.clone(),
             gpt5_profile_overrides,
-            fixture.codex_home(),
+            fixture.edgar_home(),
         )?;
         let expected_gpt5_profile_config = Config {
             model: "gpt-5".to_string(),
@@ -1981,7 +1991,7 @@ model_verbosity = "high"
             mcp_servers: HashMap::new(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
-            codex_home: fixture.codex_home(),
+            edgar_home: fixture.edgar_home(),
             history: History::default(),
             file_opener: UriBasedFileOpener::VsCode,
             codex_linux_sandbox_exe: None,
