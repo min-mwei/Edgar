@@ -107,7 +107,7 @@ async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
     let server_home = edgar_home.clone();
 
     let opts = ServerOptions {
-        edgar_home: server_home,
+        codex_home: server_home,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
         port: 0,
@@ -160,7 +160,7 @@ async fn creates_missing_edgar_home_dir() -> Result<()> {
     // Run server in background
     let server_home = edgar_home.clone();
     let opts = ServerOptions {
-        edgar_home: server_home,
+        codex_home: server_home,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
         port: 0,
@@ -196,7 +196,7 @@ async fn cancels_previous_login_server_when_port_is_in_use() -> Result<()> {
     let first_edgar_home = first_tmp.path().to_path_buf();
 
     let first_opts = ServerOptions {
-        edgar_home: first_edgar_home,
+        codex_home: first_edgar_home,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer: issuer.clone(),
         port: 0,
@@ -214,7 +214,7 @@ async fn cancels_previous_login_server_when_port_is_in_use() -> Result<()> {
     let second_edgar_home = second_tmp.path().to_path_buf();
 
     let second_opts = ServerOptions {
-        edgar_home: second_edgar_home,
+        codex_home: second_edgar_home,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
         port: login_port,

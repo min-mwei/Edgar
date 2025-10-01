@@ -1,8 +1,12 @@
 use crate::config_profile::ConfigProfile;
+use crate::config_types::DEFAULT_OTEL_ENVIRONMENT;
 use crate::config_types::History;
 use crate::config_types::McpServerConfig;
 use crate::config_types::McpServerTransportConfig;
 use crate::config_types::Notifications;
+use crate::config_types::OtelConfig;
+use crate::config_types::OtelConfigToml;
+use crate::config_types::OtelExporterKind;
 use crate::config_types::ReasoningSummaryFormat;
 use crate::config_types::SandboxWorkspaceWrite;
 use crate::config_types::ShellEnvironmentPolicy;
@@ -139,6 +143,9 @@ pub struct Config {
 
     /// Directory containing all Codex state (defaults to `~/.edgar` but can be
     /// overridden by the `CODEX_HOME` environment variable).
+    pub codex_home: PathBuf,
+
+    /// Backwards-compatible alias for code that still expects `edgar_home`.
     pub edgar_home: PathBuf,
 
     /// Settings that govern if and what will be written to `~/.edgar/history.jsonl`.
@@ -199,6 +206,9 @@ pub struct Config {
     /// All characters are inserted as they are received, and no buffering
     /// or placeholder replacement will occur for fast keypress bursts.
     pub disable_paste_burst: bool,
+
+    /// OTEL configuration (exporter type, endpoint, headers, etc.).
+    pub otel: crate::config_types::OtelConfig,
 }
 
 impl Config {
@@ -215,10 +225,10 @@ impl Config {
         // Resolve the directory that stores Codex state (e.g. ~/.edgar or the
         // value of $CODEX_HOME) so we can embed it into the resulting
         // `Config` instance.
-        let edgar_home = find_edgar_home()?;
+        let codex_home = find_codex_home()?;
 
         // Step 1: parse `config.toml` into a generic JSON value.
-        let mut root_value = load_config_as_toml(&edgar_home)?;
+        let mut root_value = load_config_as_toml(&codex_home)?;
 
         // Step 2: apply the `-c` overrides.
         for (path, value) in cli_overrides.into_iter() {
@@ -233,7 +243,7 @@ impl Config {
         })?;
 
         // Step 4: merge with the strongly-typed overrides.
-        Self::load_from_base_config_with_overrides(cfg, overrides, edgar_home)
+        Self::load_from_base_config_with_overrides(cfg, overrides, codex_home)
     }
 }
 
@@ -426,7 +436,7 @@ fn set_project_trusted_inner(doc: &mut DocumentMut, project_path: &Path) -> anyh
         .get_mut(project_key.as_str())
         .and_then(|i| i.as_table_mut())
     else {
-        return Err(anyhow::anyhow!("project table missing for {}", project_key));
+        return Err(anyhow::anyhow!("project table missing for {project_key}"));
     };
     proj_tbl.set_implicit(false);
     proj_tbl["trust_level"] = toml_edit::value("trusted");
@@ -719,6 +729,9 @@ pub struct ConfigToml {
     /// All characters are inserted as they are received, and no buffering
     /// or placeholder replacement will occur for fast keypress bursts.
     pub disable_paste_burst: Option<bool>,
+
+    /// OTEL configuration.
+    pub otel: Option<crate::config_types::OtelConfigToml>,
 }
 
 impl From<ConfigToml> for UserSavedConfig {
@@ -867,9 +880,9 @@ impl Config {
     pub fn load_from_base_config_with_overrides(
         cfg: ConfigToml,
         overrides: ConfigOverrides,
-        edgar_home: PathBuf,
+        codex_home: PathBuf,
     ) -> std::io::Result<Self> {
-        let user_instructions = Self::load_instructions(Some(&edgar_home));
+        let user_instructions = Self::load_instructions(Some(&codex_home));
 
         // Destructure ConfigOverrides fully to ensure all overrides are applied.
         let ConfigOverrides {
@@ -1006,6 +1019,8 @@ impl Config {
             .or(cfg.review_model)
             .unwrap_or_else(default_review_model);
 
+        let edgar_home = codex_home.clone();
+
         let config = Self {
             model,
             review_model,
@@ -1028,6 +1043,7 @@ impl Config {
             mcp_servers: cfg.mcp_servers,
             model_providers,
             project_doc_max_bytes: cfg.project_doc_max_bytes.unwrap_or(PROJECT_DOC_MAX_BYTES),
+            codex_home,
             edgar_home,
             history,
             file_opener: cfg.file_opener.unwrap_or(UriBasedFileOpener::VsCode),
@@ -1068,6 +1084,19 @@ impl Config {
                 .as_ref()
                 .map(|t| t.notifications.clone())
                 .unwrap_or_default(),
+            otel: {
+                let t: OtelConfigToml = cfg.otel.unwrap_or_default();
+                let log_user_prompt = t.log_user_prompt.unwrap_or(false);
+                let environment = t
+                    .environment
+                    .unwrap_or(DEFAULT_OTEL_ENVIRONMENT.to_string());
+                let exporter = t.exporter.unwrap_or(OtelExporterKind::None);
+                OtelConfig {
+                    log_user_prompt,
+                    environment,
+                    exporter,
+                }
+            },
         };
         Ok(config)
     }
@@ -1146,6 +1175,10 @@ fn default_review_model() -> String {
 ///
 /// The directory is created automatically if it does not already exist so
 /// first-run experience works without manual setup.
+pub fn find_codex_home() -> std::io::Result<PathBuf> {
+    find_edgar_home()
+}
+
 pub fn find_edgar_home() -> std::io::Result<PathBuf> {
     use std::fs;
 
@@ -1655,6 +1688,10 @@ model = "gpt-5-codex"
             self.cwd.path().to_path_buf()
         }
 
+        fn codex_home(&self) -> PathBuf {
+            self.edgar_home.path().to_path_buf()
+        }
+
         fn edgar_home(&self) -> PathBuf {
             self.edgar_home.path().to_path_buf()
         }
@@ -1798,7 +1835,8 @@ model_verbosity = "high"
                 mcp_servers: HashMap::new(),
                 model_providers: fixture.model_provider_map.clone(),
                 project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
-                edgar_home: fixture.edgar_home(),
+                codex_home: fixture.codex_home(),
+            edgar_home: fixture.edgar_home(),
                 history: History::default(),
                 file_opener: UriBasedFileOpener::VsCode,
                 codex_linux_sandbox_exe: None,
@@ -1819,6 +1857,7 @@ model_verbosity = "high"
                 active_profile: Some("o3".to_string()),
                 disable_paste_burst: false,
                 tui_notifications: Default::default(),
+                otel: OtelConfig::default(),
             },
             o3_profile_config
         );
@@ -1857,6 +1896,7 @@ model_verbosity = "high"
             mcp_servers: HashMap::new(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
+            codex_home: fixture.codex_home(),
             edgar_home: fixture.edgar_home(),
             history: History::default(),
             file_opener: UriBasedFileOpener::VsCode,
@@ -1878,6 +1918,7 @@ model_verbosity = "high"
             active_profile: Some("gpt3".to_string()),
             disable_paste_burst: false,
             tui_notifications: Default::default(),
+            otel: OtelConfig::default(),
         };
 
         assert_eq!(expected_gpt3_profile_config, gpt3_profile_config);
@@ -1931,6 +1972,7 @@ model_verbosity = "high"
             mcp_servers: HashMap::new(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
+            codex_home: fixture.codex_home(),
             edgar_home: fixture.edgar_home(),
             history: History::default(),
             file_opener: UriBasedFileOpener::VsCode,
@@ -1952,6 +1994,7 @@ model_verbosity = "high"
             active_profile: Some("zdr".to_string()),
             disable_paste_burst: false,
             tui_notifications: Default::default(),
+            otel: OtelConfig::default(),
         };
 
         assert_eq!(expected_zdr_profile_config, zdr_profile_config);
@@ -1991,6 +2034,7 @@ model_verbosity = "high"
             mcp_servers: HashMap::new(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
+            codex_home: fixture.codex_home(),
             edgar_home: fixture.edgar_home(),
             history: History::default(),
             file_opener: UriBasedFileOpener::VsCode,
@@ -2012,6 +2056,7 @@ model_verbosity = "high"
             active_profile: Some("gpt5".to_string()),
             disable_paste_burst: false,
             tui_notifications: Default::default(),
+            otel: OtelConfig::default(),
         };
 
         assert_eq!(expected_gpt5_profile_config, gpt5_profile_config);

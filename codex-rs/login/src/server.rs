@@ -16,7 +16,7 @@ use base64::Engine;
 use chrono::Utc;
 use codex_core::auth::AuthDotJson;
 use codex_core::auth::get_auth_file;
-use codex_core::default_client::ORIGINATOR;
+use codex_core::default_client::originator;
 use codex_core::token_data::TokenData;
 use codex_core::token_data::parse_id_token;
 use rand::RngCore;
@@ -31,7 +31,7 @@ const DEFAULT_PORT: u16 = 1455;
 
 #[derive(Debug, Clone)]
 pub struct ServerOptions {
-    pub edgar_home: PathBuf,
+    pub codex_home: PathBuf,
     pub client_id: String,
     pub issuer: String,
     pub port: u16,
@@ -40,9 +40,9 @@ pub struct ServerOptions {
 }
 
 impl ServerOptions {
-    pub fn new(edgar_home: PathBuf, client_id: String) -> Self {
+    pub fn new(codex_home: PathBuf, client_id: String) -> Self {
         Self {
-            edgar_home,
+            codex_home,
             client_id,
             issuer: DEFAULT_ISSUER.to_string(),
             port: DEFAULT_PORT,
@@ -236,7 +236,7 @@ async fn process_request(
                         .await
                         .ok();
                     if let Err(err) = persist_tokens_async(
-                        &opts.edgar_home,
+                        &opts.codex_home,
                         api_key.clone(),
                         tokens.id_token.clone(),
                         tokens.access_token.clone(),
@@ -315,7 +315,7 @@ fn build_authorize_url(
         ("id_token_add_organizations", "true"),
         ("codex_cli_simplified_flow", "true"),
         ("state", state),
-        ("originator", ORIGINATOR.value.as_str()),
+        ("originator", originator().value.as_str()),
     ];
     let qs = query
         .into_iter()
@@ -393,13 +393,13 @@ fn bind_server(port: u16) -> io::Result<Server> {
     }
 }
 
-struct ExchangedTokens {
-    id_token: String,
-    access_token: String,
-    refresh_token: String,
+pub(crate) struct ExchangedTokens {
+    pub id_token: String,
+    pub access_token: String,
+    pub refresh_token: String,
 }
 
-async fn exchange_code_for_tokens(
+pub(crate) async fn exchange_code_for_tokens(
     issuer: &str,
     client_id: &str,
     redirect_uri: &str,
@@ -443,17 +443,17 @@ async fn exchange_code_for_tokens(
     })
 }
 
-async fn persist_tokens_async(
-    edgar_home: &Path,
+pub(crate) async fn persist_tokens_async(
+    codex_home: &Path,
     api_key: Option<String>,
     id_token: String,
     access_token: String,
     refresh_token: String,
 ) -> io::Result<()> {
     // Reuse existing synchronous logic but run it off the async runtime.
-    let edgar_home = edgar_home.to_path_buf();
+    let codex_home = codex_home.to_path_buf();
     tokio::task::spawn_blocking(move || {
-        let auth_file = get_auth_file(&edgar_home);
+        let auth_file = get_auth_file(&codex_home);
         if let Some(parent) = auth_file.parent()
             && !parent.exists()
         {
@@ -562,7 +562,11 @@ fn jwt_auth_claims(jwt: &str) -> serde_json::Map<String, serde_json::Value> {
     serde_json::Map::new()
 }
 
-async fn obtain_api_key(issuer: &str, client_id: &str, id_token: &str) -> io::Result<String> {
+pub(crate) async fn obtain_api_key(
+    issuer: &str,
+    client_id: &str,
+    id_token: &str,
+) -> io::Result<String> {
     // Token exchange for an API key access token
     #[derive(serde::Deserialize)]
     struct ExchangeResp {

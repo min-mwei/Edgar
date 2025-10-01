@@ -25,11 +25,13 @@ Codex supports a rich set of configuration options. Note that the Rust CLI uses 
 
 Codex CLI functions as an MCP client that can connect to MCP servers on startup. See the [`mcp_servers`](../docs/config.md#mcp_servers) section in the configuration documentation for details.
 
-It is still experimental, but you can also launch Codex as an MCP _server_ by running `edgar mcp`. Use the [`@modelcontextprotocol/inspector`](https://github.com/modelcontextprotocol/inspector) to try it out:
+It is still experimental, but you can also launch Codex as an MCP _server_ by running `edgar mcp-server`. Use the [`@modelcontextprotocol/inspector`](https://github.com/modelcontextprotocol/inspector) to try it out:
 
 ```shell
-npx @modelcontextprotocol/inspector edgar mcp
+npx @modelcontextprotocol/inspector edgar mcp-server
 ```
+
+Use `edgar mcp` to add/list/get/remove MCP server launchers defined in `config.toml`, and `edgar mcp-server` to run the MCP server directly.
 
 ### Notifications
 
@@ -58,9 +60,9 @@ Sometimes it is not convenient to `cd` to the directory you want Codex to use as
 Generate shell completion scripts via:
 
 ```shell
-codex completion bash
-codex completion zsh
-codex completion fish
+edgar completion bash
+edgar completion zsh
+edgar completion fish
 ```
 
 ### Experimenting with the Codex Sandbox

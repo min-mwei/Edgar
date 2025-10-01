@@ -72,8 +72,13 @@ impl CodexAuth {
     }
 
     /// Loads the available auth information from the auth.json.
+    pub fn from_codex_home(codex_home: &Path) -> std::io::Result<Option<CodexAuth>> {
+        load_auth(codex_home)
+    }
+
+    /// Backwards-compatible helper for code that still refers to `edgar_home`.
     pub fn from_edgar_home(edgar_home: &Path) -> std::io::Result<Option<CodexAuth>> {
-        load_auth(edgar_home)
+        Self::from_codex_home(edgar_home)
     }
 
     pub async fn get_token_data(&self) -> Result<TokenData, std::io::Error> {
