@@ -25,21 +25,21 @@ Codex supports a rich set of configuration options. Note that the Rust CLI uses 
 
 Codex CLI functions as an MCP client that can connect to MCP servers on startup. See the [`mcp_servers`](../docs/config.md#mcp_servers) section in the configuration documentation for details.
 
-It is still experimental, but you can also launch Codex as an MCP _server_ by running `edgar mcp-server`. Use the [`@modelcontextprotocol/inspector`](https://github.com/modelcontextprotocol/inspector) to try it out:
+It is still experimental, but you can also launch Codex as an MCP _server_ by running `codex mcp-server`. Use the [`@modelcontextprotocol/inspector`](https://github.com/modelcontextprotocol/inspector) to try it out:
 
 ```shell
-npx @modelcontextprotocol/inspector edgar mcp-server
+npx @modelcontextprotocol/inspector codex mcp-server
 ```
 
-Use `edgar mcp` to add/list/get/remove MCP server launchers defined in `config.toml`, and `edgar mcp-server` to run the MCP server directly.
+Use `codex mcp` to add/list/get/remove MCP server launchers defined in `config.toml`, and `codex mcp-server` to run the MCP server directly.
 
 ### Notifications
 
 You can enable notifications by configuring a script that is run whenever the agent finishes a turn. The [notify documentation](../docs/config.md#notify) includes a detailed example that explains how to get desktop notifications via [terminal-notifier](https://github.com/julienXX/terminal-notifier) on macOS.
 
-### `edgar exec` to run Codex programmatically/non-interactively
+### `codex exec` to run Codex programmatically/non-interactively
 
-To run Codex non-interactively, run `edgar exec PROMPT` (you can also pass the prompt via `stdin`) and Codex will work on your task until it decides that it is done and exits. Output is printed to the terminal directly. You can set the `RUST_LOG` environment variable to see more about what's going on.
+To run Codex non-interactively, run `codex exec PROMPT` (you can also pass the prompt via `stdin`) and Codex will work on your task until it decides that it is done and exits. Output is printed to the terminal directly. You can set the `RUST_LOG` environment variable to see more about what's going on.
 
 ### Use `@` for file search
 
@@ -53,16 +53,16 @@ In the transcript preview, the footer shows an `Esc edit prev` hint while editin
 
 ### `--cd`/`-C` flag
 
-Sometimes it is not convenient to `cd` to the directory you want Codex to use as the "working root" before running Codex. Fortunately, `edgar` supports a `--cd` option so you can specify whatever folder you want. You can confirm that Codex is honoring `--cd` by double-checking the **workdir** it reports in the TUI at the start of a new session.
+Sometimes it is not convenient to `cd` to the directory you want Codex to use as the "working root" before running Codex. Fortunately, `codex` supports a `--cd` option so you can specify whatever folder you want. You can confirm that Codex is honoring `--cd` by double-checking the **workdir** it reports in the TUI at the start of a new session.
 
 ### Shell completions
 
 Generate shell completion scripts via:
 
 ```shell
-edgar completion bash
-edgar completion zsh
-edgar completion fish
+codex completion bash
+codex completion zsh
+codex completion fish
 ```
 
 ### Experimenting with the Codex Sandbox
@@ -71,10 +71,10 @@ To test to see what happens when a command is run under the sandbox provided by 
 
 ```
 # macOS
-edgar debug seatbelt [--full-auto] [COMMAND]...
+codex debug seatbelt [--full-auto] [COMMAND]...
 
 # Linux
-edgar debug landlock [--full-auto] [COMMAND]...
+codex debug landlock [--full-auto] [COMMAND]...
 ```
 
 ### Selecting a sandbox policy via `--sandbox`
@@ -83,16 +83,16 @@ The Rust CLI exposes a dedicated `--sandbox` (`-s`) flag that lets you pick the 
 
 ```shell
 # Run Codex with the default, read-only sandbox
-edgar --sandbox read-only
+codex --sandbox read-only
 
 # Allow the agent to write within the current workspace while still blocking network access
-edgar --sandbox workspace-write
+codex --sandbox workspace-write
 
 # Danger! Disable sandboxing entirely (only do this if you are already running in a container or other isolated env)
-edgar --sandbox danger-full-access
+codex --sandbox danger-full-access
 ```
 
-The same setting can be persisted in `~/.edgar/config.toml` via the top-level `sandbox_mode = "MODE"` key, e.g. `sandbox_mode = "workspace-write"`.
+The same setting can be persisted in `~/.codex/config.toml` via the top-level `sandbox_mode = "MODE"` key, e.g. `sandbox_mode = "workspace-write"`.
 
 ## Code Organization
 

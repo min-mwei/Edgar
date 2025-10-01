@@ -36,7 +36,6 @@ use codex_core::protocol::ReviewDecision;
 use codex_login::ServerOptions as LoginServerOptions;
 use codex_login::ShutdownHandle;
 use codex_login::run_login_server;
-use codex_protocol::mcp_protocol::APPLY_PATCH_APPROVAL_METHOD;
 use codex_protocol::mcp_protocol::AddConversationListenerParams;
 use codex_protocol::mcp_protocol::AddConversationSubscriptionResponse;
 use codex_protocol::mcp_protocol::ApplyPatchApprovalParams;
@@ -47,11 +46,10 @@ use codex_protocol::mcp_protocol::AuthStatusChangeNotification;
 use codex_protocol::mcp_protocol::ClientRequest;
 use codex_protocol::mcp_protocol::ConversationId;
 use codex_protocol::mcp_protocol::ConversationSummary;
-use codex_protocol::mcp_protocol::EXEC_COMMAND_APPROVAL_METHOD;
-use codex_protocol::mcp_protocol::ExecArbitraryCommandResponse;
 use codex_protocol::mcp_protocol::ExecCommandApprovalParams;
 use codex_protocol::mcp_protocol::ExecCommandApprovalResponse;
 use codex_protocol::mcp_protocol::ExecOneOffCommandParams;
+use codex_protocol::mcp_protocol::ExecOneOffCommandResponse;
 use codex_protocol::mcp_protocol::FuzzyFileSearchParams;
 use codex_protocol::mcp_protocol::FuzzyFileSearchResponse;
 use codex_protocol::mcp_protocol::GetUserAgentResponse;
@@ -76,6 +74,7 @@ use codex_protocol::mcp_protocol::SendUserMessageResponse;
 use codex_protocol::mcp_protocol::SendUserTurnParams;
 use codex_protocol::mcp_protocol::SendUserTurnResponse;
 use codex_protocol::mcp_protocol::ServerNotification;
+use codex_protocol::mcp_protocol::ServerRequestPayload;
 use codex_protocol::mcp_protocol::SessionConfiguredNotification;
 use codex_protocol::mcp_protocol::SetDefaultModelParams;
 use codex_protocol::mcp_protocol::SetDefaultModelResponse;
@@ -249,7 +248,7 @@ impl CodexMessageProcessor {
             }
         }
 
-        match login_with_api_key(&self.config.edgar_home, &params.api_key) {
+        match login_with_api_key(&self.config.codex_home, &params.api_key) {
             Ok(()) => {
                 self.auth_manager.reload();
                 self.outgoing
@@ -279,7 +278,7 @@ impl CodexMessageProcessor {
 
         let opts = LoginServerOptions {
             open_browser: false,
-            ..LoginServerOptions::new(config.edgar_home.clone(), CLIENT_ID.to_string())
+            ..LoginServerOptions::new(config.codex_home.clone(), CLIENT_ID.to_string())
         };
 
         enum LoginChatGptReply {
@@ -499,7 +498,7 @@ impl CodexMessageProcessor {
     }
 
     async fn get_user_saved_config(&self, request_id: RequestId) {
-        let toml_value = match load_config_as_toml(&self.config.edgar_home) {
+        let toml_value = match load_config_as_toml(&self.config.codex_home) {
             Ok(val) => val,
             Err(err) => {
                 let error = JSONRPCErrorError {
@@ -535,7 +534,7 @@ impl CodexMessageProcessor {
 
     async fn get_user_info(&self, request_id: RequestId) {
         // Read alleged user email from auth.json (best-effort; not verified).
-        let auth_path = get_auth_file(&self.config.edgar_home);
+        let auth_path = get_auth_file(&self.config.codex_home);
         let alleged_user_email = match try_read_auth_json(&auth_path) {
             Ok(auth) => auth.tokens.and_then(|t| t.id_token.email),
             Err(_) => None,
@@ -558,7 +557,7 @@ impl CodexMessageProcessor {
         ];
 
         match persist_overrides_and_clear_if_none(
-            &self.config.edgar_home,
+            &self.config.codex_home,
             self.config.active_profile.as_deref(),
             &overrides,
         )
@@ -632,7 +631,7 @@ impl CodexMessageProcessor {
             .await
             {
                 Ok(output) => {
-                    let response = ExecArbitraryCommandResponse {
+                    let response = ExecOneOffCommandResponse {
                         exit_code: output.exit_code,
                         stdout: output.stdout.text,
                         stderr: output.stderr.text,
@@ -705,7 +704,7 @@ impl CodexMessageProcessor {
         let cursor_ref = cursor_obj.as_ref();
 
         let page = match RolloutRecorder::list_conversations(
-            &self.config.edgar_home,
+            &self.config.codex_home,
             page_size,
             cursor_ref,
         )
@@ -834,7 +833,7 @@ impl CodexMessageProcessor {
 
         // Verify that the rollout path is in the sessions directory or else
         // a malicious client could specify an arbitrary path.
-        let rollout_folder = self.config.edgar_home.join(codex_core::SESSIONS_SUBDIR);
+        let rollout_folder = self.config.codex_home.join(codex_core::SESSIONS_SUBDIR);
         let canonical_rollout_path = tokio::fs::canonicalize(&rollout_path).await;
         let canonical_rollout_path = if let Ok(path) = canonical_rollout_path
             && path.starts_with(&rollout_folder)
@@ -937,7 +936,7 @@ impl CodexMessageProcessor {
         let result: std::io::Result<()> = async {
             let archive_folder = self
                 .config
-                .edgar_home
+                .codex_home
                 .join(codex_core::ARCHIVED_SESSIONS_SUBDIR);
             tokio::fs::create_dir_all(&archive_folder).await?;
             tokio::fs::rename(&canonical_rollout_path, &archive_folder.join(&file_name)).await?;
@@ -1268,9 +1267,8 @@ async fn apply_bespoke_event_handling(
                 reason,
                 grant_root,
             };
-            let value = serde_json::to_value(&params).unwrap_or_default();
             let rx = outgoing
-                .send_request(APPLY_PATCH_APPROVAL_METHOD, Some(value))
+                .send_request(ServerRequestPayload::ApplyPatchApproval(params))
                 .await;
             // TODO(mbolin): Enforce a timeout so this task does not live indefinitely?
             tokio::spawn(async move {
@@ -1290,9 +1288,8 @@ async fn apply_bespoke_event_handling(
                 cwd,
                 reason,
             };
-            let value = serde_json::to_value(&params).unwrap_or_default();
             let rx = outgoing
-                .send_request(EXEC_COMMAND_APPROVAL_METHOD, Some(value))
+                .send_request(ServerRequestPayload::ExecCommandApproval(params))
                 .await;
 
             // TODO(mbolin): Enforce a timeout so this task does not live indefinitely?

@@ -12,7 +12,7 @@ use codex_core::protocol_config_types::ReasoningSummary;
 use codex_core::spawn::CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR;
 use codex_protocol::mcp_protocol::AddConversationListenerParams;
 use codex_protocol::mcp_protocol::AddConversationSubscriptionResponse;
-use codex_protocol::mcp_protocol::EXEC_COMMAND_APPROVAL_METHOD;
+use codex_protocol::mcp_protocol::ExecCommandApprovalParams;
 use codex_protocol::mcp_protocol::NewConversationParams;
 use codex_protocol::mcp_protocol::NewConversationResponse;
 use codex_protocol::mcp_protocol::RemoveConversationListenerParams;
@@ -21,6 +21,7 @@ use codex_protocol::mcp_protocol::SendUserMessageParams;
 use codex_protocol::mcp_protocol::SendUserMessageResponse;
 use codex_protocol::mcp_protocol::SendUserTurnParams;
 use codex_protocol::mcp_protocol::SendUserTurnResponse;
+use codex_protocol::mcp_protocol::ServerRequest;
 use mcp_types::JSONRPCNotification;
 use mcp_types::JSONRPCResponse;
 use mcp_types::RequestId;
@@ -42,8 +43,8 @@ async fn test_codex_jsonrpc_conversation_flow() {
 
     let tmp = TempDir::new().expect("tmp dir");
     // Temporary Codex home with config pointing at the mock server.
-    let edgar_home = tmp.path().join("edgar_home");
-    std::fs::create_dir(&edgar_home).expect("create codex home dir");
+    let codex_home = tmp.path().join("codex_home");
+    std::fs::create_dir(&codex_home).expect("create codex home dir");
     let working_directory = tmp.path().join("workdir");
     std::fs::create_dir(&working_directory).expect("create working directory");
 
@@ -61,10 +62,10 @@ async fn test_codex_jsonrpc_conversation_flow() {
             .expect("create final assistant message"),
     ];
     let server = create_mock_chat_completions_server(responses).await;
-    create_config_toml(&edgar_home, &server.uri()).expect("write config");
+    create_config_toml(&codex_home, &server.uri()).expect("write config");
 
     // Start MCP server and initialize.
-    let mut mcp = McpProcess::new(&edgar_home).await.expect("spawn mcp");
+    let mut mcp = McpProcess::new(&codex_home).await.expect("spawn mcp");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
         .await
         .expect("init timeout")
@@ -180,8 +181,8 @@ async fn test_send_user_turn_changes_approval_policy_behavior() {
     }
 
     let tmp = TempDir::new().expect("tmp dir");
-    let edgar_home = tmp.path().join("edgar_home");
-    std::fs::create_dir(&edgar_home).expect("create codex home dir");
+    let codex_home = tmp.path().join("codex_home");
+    std::fs::create_dir(&codex_home).expect("create codex home dir");
     let working_directory = tmp.path().join("workdir");
     std::fs::create_dir(&working_directory).expect("create working directory");
 
@@ -215,10 +216,10 @@ async fn test_send_user_turn_changes_approval_policy_behavior() {
             .expect("create final assistant message 2"),
     ];
     let server = create_mock_chat_completions_server(responses).await;
-    create_config_toml(&edgar_home, &server.uri()).expect("write config");
+    create_config_toml(&codex_home, &server.uri()).expect("write config");
 
     // Start MCP server and initialize.
-    let mut mcp = McpProcess::new(&edgar_home).await.expect("spawn mcp");
+    let mut mcp = McpProcess::new(&codex_home).await.expect("spawn mcp");
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize())
         .await
         .expect("init timeout")
@@ -290,11 +291,28 @@ async fn test_send_user_turn_changes_approval_policy_behavior() {
     .await
     .expect("waiting for exec approval request timeout")
     .expect("exec approval request");
-    assert_eq!(request.method, EXEC_COMMAND_APPROVAL_METHOD);
+    let ServerRequest::ExecCommandApproval { request_id, params } = request else {
+        panic!("expected ExecCommandApproval request, got: {request:?}");
+    };
+
+    assert_eq!(
+        ExecCommandApprovalParams {
+            conversation_id,
+            call_id: "call1".to_string(),
+            command: vec![
+                "python3".to_string(),
+                "-c".to_string(),
+                "print(42)".to_string(),
+            ],
+            cwd: working_directory.clone(),
+            reason: None,
+        },
+        params
+    );
 
     // Approve so the first turn can complete
     mcp.send_response(
-        request.id,
+        request_id,
         serde_json::json!({ "decision": codex_core::protocol::ReviewDecision::Approved }),
     )
     .await
@@ -349,8 +367,8 @@ async fn test_send_user_turn_changes_approval_policy_behavior() {
 }
 
 // Helper: minimal config.toml pointing at mock provider.
-fn create_config_toml(edgar_home: &Path, server_uri: &str) -> std::io::Result<()> {
-    let config_toml = edgar_home.join("config.toml");
+fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
+    let config_toml = codex_home.join("config.toml");
     std::fs::write(
         config_toml,
         format!(

@@ -5,28 +5,26 @@ use clap_complete::generate;
 use codex_arg0::arg0_dispatch_or_else;
 use codex_chatgpt::apply_command::ApplyCommand;
 use codex_chatgpt::apply_command::run_apply_command;
+use codex_cli::LandlockCommand;
+use codex_cli::SeatbeltCommand;
+use codex_cli::login::run_login_status;
+use codex_cli::login::run_login_with_api_key;
+use codex_cli::login::run_login_with_chatgpt;
+use codex_cli::login::run_login_with_device_code;
+use codex_cli::login::run_logout;
 use codex_cloud_tasks::Cli as CloudTasksCli;
 use codex_common::CliConfigOverrides;
 use codex_exec::Cli as ExecCli;
 use codex_responses_api_proxy::Args as ResponsesApiProxyArgs;
 use codex_tui::AppExitInfo;
 use codex_tui::Cli as TuiCli;
-use edgar_cli::LandlockCommand;
-use edgar_cli::SeatbeltCommand;
-use edgar_cli::login::run_login_status;
-use edgar_cli::login::run_login_with_api_key;
-use edgar_cli::login::run_login_with_chatgpt;
-use edgar_cli::login::run_login_with_device_code;
-use edgar_cli::login::run_logout;
 use owo_colors::OwoColorize;
 use std::path::PathBuf;
 use supports_color::Stream;
 
 mod mcp_cmd;
-mod proto;
 
 use crate::mcp_cmd::McpCli;
-use crate::proto::ProtoCli;
 
 /// Codex CLI
 ///
@@ -38,9 +36,9 @@ use crate::proto::ProtoCli;
     // If a sub‑command is given, ignore requirements of the default args.
     subcommand_negates_reqs = true,
     // The executable is sometimes invoked via a platform‑specific name like
-    // `edgar-x86_64-unknown-linux-musl`, but the help output should always use
-    // the generic `edgar` command name that users run.
-    bin_name = "edgar"
+    // `codex-x86_64-unknown-linux-musl`, but the help output should always use
+    // the generic `codex` command name that users run.
+    bin_name = "codex"
 )]
 struct MultitoolCli {
     #[clap(flatten)]
@@ -67,10 +65,6 @@ enum Subcommand {
 
     /// [experimental] Run Codex as an MCP server and manage MCP servers.
     Mcp(McpCli),
-
-    /// Run the Protocol stream via stdin/stdout
-    #[clap(visible_alias = "p")]
-    Proto(ProtoCli),
 
     /// [experimental] Run the Codex MCP server (stdio transport).
     McpServer,
@@ -205,7 +199,7 @@ fn format_exit_messages(exit_info: AppExitInfo, color_enabled: bool) -> Vec<Stri
     )];
 
     if let Some(session_id) = conversation_id {
-        let resume_cmd = format!("edgar resume {session_id}");
+        let resume_cmd = format!("codex resume {session_id}");
         let command = if color_enabled {
             resume_cmd.cyan().to_string()
         } else {
@@ -269,13 +263,6 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
             // Propagate any root-level config overrides (e.g. `-c key=value`).
             prepend_config_flags(&mut mcp_cli.config_overrides, root_config_overrides.clone());
             mcp_cli.run().await?;
-        }
-        Some(Subcommand::Proto(mut proto_cli)) => {
-            prepend_config_flags(
-                &mut proto_cli.config_overrides,
-                root_config_overrides.clone(),
-            );
-            proto::run_main(proto_cli).await?;
         }
         Some(Subcommand::AppServer) => {
             codex_app_server::run_main(codex_linux_sandbox_exe, root_config_overrides).await?;
@@ -342,7 +329,7 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
                     &mut seatbelt_cli.config_overrides,
                     root_config_overrides.clone(),
                 );
-                edgar_cli::debug_sandbox::run_command_under_seatbelt(
+                codex_cli::debug_sandbox::run_command_under_seatbelt(
                     seatbelt_cli,
                     codex_linux_sandbox_exe,
                 )
@@ -353,7 +340,7 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
                     &mut landlock_cli.config_overrides,
                     root_config_overrides.clone(),
                 );
-                edgar_cli::debug_sandbox::run_command_under_landlock(
+                codex_cli::debug_sandbox::run_command_under_landlock(
                     landlock_cli,
                     codex_linux_sandbox_exe,
                 )
@@ -390,7 +377,7 @@ fn prepend_config_flags(
         .splice(0..0, cli_config_overrides.raw_overrides);
 }
 
-/// Build the final `TuiCli` for an `edgar resume` invocation.
+/// Build the final `TuiCli` for a `codex resume` invocation.
 fn finalize_resume_interactive(
     mut interactive: TuiCli,
     root_config_overrides: CliConfigOverrides,
@@ -399,7 +386,7 @@ fn finalize_resume_interactive(
     resume_cli: TuiCli,
 ) -> TuiCli {
     // Start with the parsed interactive CLI so resume shares the same
-    // configuration surface area as `edgar` without additional flags.
+    // configuration surface area as `codex` without additional flags.
     let resume_session_id = session_id;
     interactive.resume_picker = resume_session_id.is_none() && !last;
     interactive.resume_last = last;
@@ -414,7 +401,7 @@ fn finalize_resume_interactive(
     interactive
 }
 
-/// Merge flags provided to `edgar resume` so they take precedence over any
+/// Merge flags provided to `codex resume` so they take precedence over any
 /// root-level flags. Only overrides fields explicitly set on the resume-scoped
 /// CLI. Also appends `-c key=value` overrides with highest precedence.
 fn merge_resume_cli_flags(interactive: &mut TuiCli, resume_cli: TuiCli) {
@@ -460,7 +447,7 @@ fn merge_resume_cli_flags(interactive: &mut TuiCli, resume_cli: TuiCli) {
 
 fn print_completion(cmd: CompletionCommand) {
     let mut app = MultitoolCli::command();
-    let name = "edgar";
+    let name = "codex";
     generate(cmd.shell, &mut app, name, &mut std::io::stdout());
 }
 
@@ -522,7 +509,7 @@ mod tests {
             lines,
             vec![
                 "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run edgar resume 123e4567-e89b-12d3-a456-426614174000"
+                "To continue this session, run codex resume 123e4567-e89b-12d3-a456-426614174000"
                     .to_string(),
             ]
         );
@@ -538,7 +525,7 @@ mod tests {
 
     #[test]
     fn resume_model_flag_applies_when_no_root_flags() {
-        let interactive = finalize_from_args(["edgar", "resume", "-m", "gpt-5-test"].as_ref());
+        let interactive = finalize_from_args(["codex", "resume", "-m", "gpt-5-test"].as_ref());
 
         assert_eq!(interactive.model.as_deref(), Some("gpt-5-test"));
         assert!(interactive.resume_picker);
@@ -548,7 +535,7 @@ mod tests {
 
     #[test]
     fn resume_picker_logic_none_and_not_last() {
-        let interactive = finalize_from_args(["edgar", "resume"].as_ref());
+        let interactive = finalize_from_args(["codex", "resume"].as_ref());
         assert!(interactive.resume_picker);
         assert!(!interactive.resume_last);
         assert_eq!(interactive.resume_session_id, None);
@@ -556,7 +543,7 @@ mod tests {
 
     #[test]
     fn resume_picker_logic_last() {
-        let interactive = finalize_from_args(["edgar", "resume", "--last"].as_ref());
+        let interactive = finalize_from_args(["codex", "resume", "--last"].as_ref());
         assert!(!interactive.resume_picker);
         assert!(interactive.resume_last);
         assert_eq!(interactive.resume_session_id, None);
@@ -564,7 +551,7 @@ mod tests {
 
     #[test]
     fn resume_picker_logic_with_session_id() {
-        let interactive = finalize_from_args(["edgar", "resume", "1234"].as_ref());
+        let interactive = finalize_from_args(["codex", "resume", "1234"].as_ref());
         assert!(!interactive.resume_picker);
         assert!(!interactive.resume_last);
         assert_eq!(interactive.resume_session_id.as_deref(), Some("1234"));
@@ -574,7 +561,7 @@ mod tests {
     fn resume_merges_option_flags_and_full_auto() {
         let interactive = finalize_from_args(
             [
-                "edgar",
+                "codex",
                 "resume",
                 "sid",
                 "--oss",
@@ -631,7 +618,7 @@ mod tests {
     fn resume_merges_dangerously_bypass_flag() {
         let interactive = finalize_from_args(
             [
-                "edgar",
+                "codex",
                 "resume",
                 "--dangerously-bypass-approvals-and-sandbox",
             ]
