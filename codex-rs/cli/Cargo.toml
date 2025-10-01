@@ -4,11 +4,11 @@ name = "edgar-cli"
 version = { workspace = true }
 
 [[bin]]
-name = "edgar"
+name = "edgar-cli"
 path = "src/main.rs"
 
 [lib]
-name = "edgar_cli"
+name = "codex_cli"
 path = "src/lib.rs"
 
 [lints]
