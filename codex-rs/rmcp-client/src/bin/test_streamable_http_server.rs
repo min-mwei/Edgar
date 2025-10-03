@@ -223,10 +223,7 @@ async fn verify_session(state: &AppState, headers: &HeaderMap) -> Result<(), (St
     let header_value = headers
         .get("mcp-session-id")
         .and_then(|value| value.to_str().ok())
-        .ok_or((
-            StatusCode::UNAUTHORIZED,
-            "missing mcp-session-id".to_string(),
-        ))?;
+        .ok_or_else(|| bad_request("missing mcp-session-id"))?;
 
     let guard = state.session_id.lock().await;
     match guard.as_deref() {
