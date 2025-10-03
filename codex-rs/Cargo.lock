@@ -1225,12 +1225,15 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "axum",
+ "clap",
  "codex-arg0",
  "codex-common",
  "codex-core",
  "codex-protocol",
  "codex-utils-json-to-toml",
  "core_test_support",
+ "futures",
  "mcp-types",
  "mcp_test_support",
  "os_info",
@@ -1241,8 +1244,10 @@ dependencies = [
  "shlex",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "wiremock",
 ]
 
@@ -6007,6 +6012,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

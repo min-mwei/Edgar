@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 codex-arg0 = { workspace = true }
 codex-common = { workspace = true, features = ["cli"] }
 codex-core = { workspace = true }
@@ -26,6 +27,7 @@ schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 shlex = { workspace = true }
+axum = { workspace = true }
 tokio = { workspace = true, features = [
     "io-std",
     "macros",
@@ -35,6 +37,9 @@ tokio = { workspace = true, features = [
 ] }
 tracing = { workspace = true, features = ["log"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+uuid = { workspace = true, features = ["v4", "serde"] }
+tokio-stream = { workspace = true, features = ["sync"] }
+futures = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
