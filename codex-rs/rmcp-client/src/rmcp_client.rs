@@ -20,9 +20,7 @@ use rmcp::model::PaginatedRequestParam;
 use rmcp::service::RoleClient;
 use rmcp::service::RunningService;
 use rmcp::service::{self};
-use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::child_process::TokioChildProcess;
-use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command;
@@ -40,7 +38,6 @@ use crate::utils::run_with_timeout;
 
 enum PendingTransport {
     ChildProcess(TokioChildProcess),
-    StreamableHttp(StreamableHttpClientTransport<reqwest::Client>),
 }
 
 enum ClientState {
@@ -103,21 +100,6 @@ impl RmcpClient {
         })
     }
 
-    pub fn new_streamable_http_client(url: String, bearer_token: Option<String>) -> Result<Self> {
-        let mut config = StreamableHttpClientTransportConfig::with_uri(url);
-        if let Some(token) = bearer_token {
-            config = config.auth_header(format!("Bearer {token}"));
-        }
-
-        let transport = StreamableHttpClientTransport::from_config(config);
-
-        Ok(Self {
-            state: Mutex::new(ClientState::Connecting {
-                transport: Some(PendingTransport::StreamableHttp(transport)),
-            }),
-        })
-    }
-
     /// Perform the initialization handshake with the MCP server.
     /// https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle#initialization
     pub async fn initialize(
@@ -142,9 +124,6 @@ impl RmcpClient {
         let service_future = match transport {
             PendingTransport::ChildProcess(transport) => {
                 service::serve_client(client_handler.clone(), transport).boxed()
-            }
-            PendingTransport::StreamableHttp(transport) => {
-                service::serve_client(client_handler, transport).boxed()
             }
         };
 

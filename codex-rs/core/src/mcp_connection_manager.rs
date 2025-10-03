@@ -17,6 +17,8 @@ use anyhow::Result;
 use anyhow::anyhow;
 use codex_mcp_client::McpClient;
 use codex_rmcp_client::RmcpClient;
+use codex_rmcp_client::StreamableHttpClient;
+use mcp_types::CallToolRequestParams;
 use mcp_types::ClientCapabilities;
 use mcp_types::Implementation;
 use mcp_types::Tool;
@@ -97,6 +99,7 @@ struct ManagedClient {
 enum McpClientAdapter {
     Legacy(Arc<McpClient>),
     Rmcp(Arc<RmcpClient>),
+    StreamableHttp(Arc<StreamableHttpClient>),
 }
 
 impl McpClientAdapter {
@@ -128,9 +131,10 @@ impl McpClientAdapter {
         params: mcp_types::InitializeRequestParams,
         startup_timeout: Duration,
     ) -> Result<Self> {
-        let client = Arc::new(RmcpClient::new_streamable_http_client(url, bearer_token)?);
-        client.initialize(params, Some(startup_timeout)).await?;
-        Ok(McpClientAdapter::Rmcp(client))
+        let client = Arc::new(
+            StreamableHttpClient::connect(url, bearer_token, params, startup_timeout).await?,
+        );
+        Ok(McpClientAdapter::StreamableHttp(client))
     }
 
     async fn list_tools(
@@ -141,6 +145,11 @@ impl McpClientAdapter {
         match self {
             McpClientAdapter::Legacy(client) => client.list_tools(params, timeout).await,
             McpClientAdapter::Rmcp(client) => client.list_tools(params, timeout).await,
+            McpClientAdapter::StreamableHttp(client) => {
+                client
+                    .list_tools(params, timeout.unwrap_or(DEFAULT_TOOL_TIMEOUT))
+                    .await
+            }
         }
     }
 
@@ -153,6 +162,12 @@ impl McpClientAdapter {
         match self {
             McpClientAdapter::Legacy(client) => client.call_tool(name, arguments, timeout).await,
             McpClientAdapter::Rmcp(client) => client.call_tool(name, arguments, timeout).await,
+            McpClientAdapter::StreamableHttp(client) => {
+                let params = CallToolRequestParams { arguments, name };
+                client
+                    .call_tool(params, timeout.unwrap_or(DEFAULT_TOOL_TIMEOUT))
+                    .await
+            }
         }
     }
 }
