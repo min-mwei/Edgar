@@ -36,7 +36,9 @@ use tokio_stream::StreamExt;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::prelude::*;
 use uuid::Uuid;
 
 mod codex_tool_config;
@@ -46,6 +48,7 @@ mod exec_approval;
 pub(crate) mod message_processor;
 mod outgoing_message;
 mod patch_approval;
+mod redact;
 
 use crate::message_processor::MessageProcessor;
 use crate::outgoing_message::OutgoingMessage;
@@ -63,16 +66,46 @@ pub use crate::patch_approval::PatchApprovalResponse;
 /// plenty for an interactive CLI.
 const CHANNEL_CAPACITY: usize = 128;
 
+/// Lazily install a `tracing` subscriber that writes to stderr and to
+/// `CODEX_HOME/log/codex-rmcp.log`. This function is idempotent across calls.
+fn init_tracing() -> IoResult<()> {
+    // Compute log file path under CODEX_HOME/log.
+    let mut log_dir = codex_core::config::find_codex_home()?;
+    log_dir.push("log");
+
+    std::fs::create_dir_all(&log_dir)?;
+
+    let file_appender = tracing_appender::rolling::never(log_dir, "codex-rmcp.log");
+    let (file_writer, guard): (tracing_appender::non_blocking::NonBlocking, WorkerGuard) =
+        tracing_appender::non_blocking(file_appender);
+
+    // Leak the guard so the background worker stays alive for the process lifetime.
+    let _ = Box::leak(Box::new(guard));
+
+    let env_filter = EnvFilter::from_default_env();
+
+    let stderr_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stderr);
+    let file_writer_clone = file_writer.clone();
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_writer(move || crate::redact::SanitizingWriter::new(file_writer_clone.clone()));
+
+    // Ignore error if a global subscriber has already been set up.
+    let _ = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(stderr_layer)
+        .with(file_layer)
+        .try_init();
+
+    Ok(())
+}
+
 pub async fn run_main(
     codex_linux_sandbox_exe: Option<PathBuf>,
     cli_config_overrides: CliConfigOverrides,
 ) -> IoResult<()> {
-    // Install a simple subscriber so `tracing` output is visible.  Users can
-    // control the log level with `RUST_LOG`.
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    // Install logging to stderr and CODEX_HOME/log/codex-rmcp.log.
+    init_tracing()?;
 
     // Set up channels.
     let (incoming_tx, mut incoming_rx) = mpsc::channel::<JSONRPCMessage>(CHANNEL_CAPACITY);
@@ -169,14 +202,20 @@ pub async fn run_main(
 }
 
 /// HTTP server state for MCP (streamable HTTP-like) transport.
-struct HttpState {
+struct SessionState {
     incoming_tx: mpsc::Sender<JSONRPCMessage>,
-    /// Broadcast channel for SSE notifications/responses.
+    /// Broadcast channel for SSE notifications/responses for this session.
     sse_tx: broadcast::Sender<String>,
-    /// Pending HTTP responders keyed by client request id.
+    /// Pending HTTP responders keyed by client request id for this session.
     pending: tokio::sync::Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<String>>>,
-    /// Single session id used for simple, single-tenant server mode.
-    session_id: String,
+}
+
+/// Shared HTTP server state managing multiple concurrent sessions.
+struct HttpMultiState {
+    sessions: tokio::sync::Mutex<HashMap<String, Arc<SessionState>>>,
+    /// Fixed process-wide components used to create new sessions.
+    codex_linux_sandbox_exe: Option<PathBuf>,
+    config: Arc<Config>,
 }
 
 /// Run the MCP server over HTTP on the specified bind address.
@@ -189,24 +228,7 @@ pub async fn run_http_server(
     host: String,
     port: u16,
 ) -> IoResult<()> {
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
-
-    // Channels to/from the Codex message processor.
-    let (incoming_tx, mut incoming_rx) = mpsc::channel::<JSONRPCMessage>(CHANNEL_CAPACITY);
-    let (outgoing_tx, mut outgoing_rx) = mpsc::unbounded_channel::<OutgoingMessage>();
-
-    // Shared HTTP state and simple single-session id.
-    let (sse_tx, _sse_rx) = broadcast::channel::<String>(CHANNEL_CAPACITY);
-    let session_id = Uuid::new_v4().to_string();
-    let state = Arc::new(HttpState {
-        incoming_tx,
-        sse_tx,
-        pending: tokio::sync::Mutex::new(HashMap::new()),
-        session_id,
-    });
+    init_tracing()?;
 
     // Parse CLI overrides and derive base Config.
     let cli_kv_overrides = cli_config_overrides.parse_overrides().map_err(|e| {
@@ -221,58 +243,11 @@ pub async fn run_http_server(
             std::io::Error::new(ErrorKind::InvalidData, format!("error loading config: {e}"))
         })?;
 
-    // Task: process incoming messages.
-    let processor_handle = tokio::spawn({
-        let outgoing_for_processor = outgoing_tx.clone();
-        let mut processor = MessageProcessor::new(
-            OutgoingMessageSender::new(outgoing_for_processor),
-            codex_linux_sandbox_exe.clone(),
-            std::sync::Arc::new(config),
-        );
-        async move {
-            while let Some(msg) = incoming_rx.recv().await {
-                match msg {
-                    JSONRPCMessage::Request(r) => processor.process_request(r).await,
-                    JSONRPCMessage::Response(r) => processor.process_response(r).await,
-                    JSONRPCMessage::Notification(n) => processor.process_notification(n).await,
-                    JSONRPCMessage::Error(e) => processor.process_error(e),
-                }
-            }
-            info!("processor task exited (channel closed)");
-        }
-    });
-
-    // Task: bridge OutgoingMessage -> HTTP responders and SSE stream.
-    let bridge_state = Arc::clone(&state);
-    let bridge_handle = tokio::spawn(async move {
-        while let Some(outgoing_message) = outgoing_rx.recv().await {
-            let msg: JSONRPCMessage = outgoing_message.into();
-            match serde_json::to_string(&msg) {
-                Ok(json) => {
-                    // Try to fulfill an awaiting HTTP request by id.
-                    let maybe_id = match &msg {
-                        JSONRPCMessage::Response(r) => Some(r.id.clone()),
-                        JSONRPCMessage::Error(e) => Some(e.id.clone()),
-                        _ => None,
-                    };
-
-                    if let Some(id) = maybe_id {
-                        let sender = {
-                            let mut guard = bridge_state.pending.lock().await;
-                            guard.remove(&id)
-                        };
-                        if let Some(tx) = sender {
-                            let _ = tx.send(json.clone());
-                        }
-                    }
-
-                    // Broadcast all messages to SSE subscribers as well.
-                    let _ = bridge_state.sse_tx.send(json);
-                }
-                Err(e) => error!("Failed to serialize JSONRPCMessage for HTTP/SSE: {e}"),
-            }
-        }
-        info!("HTTP bridge task exited (channel closed)");
+    // Shared HTTP state (multi-session).
+    let state = Arc::new(HttpMultiState {
+        sessions: tokio::sync::Mutex::new(HashMap::new()),
+        codex_linux_sandbox_exe,
+        config: Arc::new(config),
     });
 
     // Build HTTP router.
@@ -300,48 +275,84 @@ pub async fn run_http_server(
         .map_err(|e| std::io::Error::other(format!("server error: {e}")))?;
 
     // Graceful shutdown of tasks if server exits.
-    let _ = tokio::join!(processor_handle, bridge_handle);
+    // No global tasks to await; sessions own their tasks.
 
     Ok(())
 }
 
 async fn handle_post(
-    State(state): State<Arc<HttpState>>,
+    State(state): State<Arc<HttpMultiState>>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    // Always echo a stable session id for the client to re-use.
-    let mut response_headers = HeaderMap::new();
-    if let Ok(value) = HeaderValue::from_str(&state.session_id) {
-        response_headers.insert("mcp-session-id", value);
-    }
-
-    // Parse the incoming message and forward to the processor.
+    // Parse the incoming message and forward to the processor for this session.
     let msg: JSONRPCMessage = match serde_json::from_value(body) {
         Ok(m) => m,
         Err(err) => {
             error!("Failed to parse JSONRPCMessage from HTTP POST: {err}");
             return (
                 StatusCode::BAD_REQUEST,
-                response_headers,
+                HeaderMap::new(),
                 "invalid JSON-RPC",
             )
                 .into_response();
         }
     };
 
-    // Optionally honor the provided session id (single-session server: ignore).
-    let _client_session = headers.get("mcp-session-id").and_then(|v| v.to_str().ok());
+    // Resolve or create a session based on optional header.
+    let mut response_headers = HeaderMap::new();
+    let client_session = headers
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(std::string::ToString::to_string);
+    let (session_id, session) = ensure_session(Arc::clone(&state), client_session).await;
+    if let Ok(value) = HeaderValue::from_str(&session_id) {
+        response_headers.insert("mcp-session-id", value);
+    }
 
     match msg.clone() {
         JSONRPCMessage::Request(r) => {
-            // Track a responder for this id and forward.
+            // If client prefers SSE for the POST, stream the response and any
+            // notifications over SSE for low latency.
+            let accept_header = headers
+                .get("accept")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_lowercase();
+            let wants_sse = accept_header.contains("text/event-stream");
+
+            if wants_sse {
+                // Subscribe first to avoid missing early events, then forward request.
+                let rx = session.sse_tx.subscribe();
+                if session
+                    .incoming_tx
+                    .send(JSONRPCMessage::Request(r))
+                    .await
+                    .is_err()
+                {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        response_headers,
+                        "processor unavailable",
+                    )
+                        .into_response();
+                }
+
+                let stream = tokio_stream::wrappers::BroadcastStream::new(rx).map(|res| {
+                    let json = res.unwrap_or_default();
+                    let evt = Event::default().data(json);
+                    Ok::<Event, Infallible>(evt)
+                });
+                return (StatusCode::OK, response_headers, Sse::new(stream)).into_response();
+            }
+
+            // Default: keep legacy behavior and return JSON response inline.
             let (tx, rx) = tokio::sync::oneshot::channel::<String>();
             {
-                let mut guard = state.pending.lock().await;
+                let mut guard = session.pending.lock().await;
                 guard.insert(r.id.clone(), tx);
             }
-            if state
+            if session
                 .incoming_tx
                 .send(JSONRPCMessage::Request(r))
                 .await
@@ -355,7 +366,6 @@ async fn handle_post(
                     .into_response();
             }
 
-            // Wait for the matching response serialized as a JSON string.
             match rx.await {
                 Ok(json) => (
                     StatusCode::OK,
@@ -373,39 +383,135 @@ async fn handle_post(
         }
         // Forward and acknowledge without waiting.
         JSONRPCMessage::Response(r) => {
-            let _ = state.incoming_tx.send(JSONRPCMessage::Response(r)).await;
+            let _ = session.incoming_tx.send(JSONRPCMessage::Response(r)).await;
             (StatusCode::NO_CONTENT, response_headers).into_response()
         }
         JSONRPCMessage::Notification(n) => {
-            let _ = state
+            let _ = session
                 .incoming_tx
                 .send(JSONRPCMessage::Notification(n))
                 .await;
             (StatusCode::NO_CONTENT, response_headers).into_response()
         }
         JSONRPCMessage::Error(e) => {
-            let _ = state.incoming_tx.send(JSONRPCMessage::Error(e)).await;
+            let _ = session.incoming_tx.send(JSONRPCMessage::Error(e)).await;
             (StatusCode::NO_CONTENT, response_headers).into_response()
         }
     }
 }
 
 async fn handle_sse(
-    State(state): State<Arc<HttpState>>,
+    State(state): State<Arc<HttpMultiState>>,
     headers: HeaderMap,
 ) -> Sse<impl futures::Stream<Item = Result<Event, Infallible>>> {
-    // If client provides a session id ensure it matches (single-session server).
-    if let Some(id) = headers.get("mcp-session-id").and_then(|v| v.to_str().ok())
-        && id != state.session_id
-    {
-        debug!("client provided mismatched session id; proceeding with server session");
-    }
+    // Use client-provided session id or create a new one.
+    let client_session = headers
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(std::string::ToString::to_string);
+    let (_session_id, session) = ensure_session(Arc::clone(&state), client_session).await;
 
-    let rx = state.sse_tx.subscribe();
+    let rx = session.sse_tx.subscribe();
     let stream = tokio_stream::wrappers::BroadcastStream::new(rx).map(|res| {
         let json = res.unwrap_or_default();
         let evt = Event::default().data(json);
         Ok::<Event, Infallible>(evt)
     });
     Sse::new(stream)
+}
+
+/// Ensure a session exists for the provided id or create a new one. Returns the
+/// session id and an `Arc` to its state.
+async fn ensure_session(
+    state: Arc<HttpMultiState>,
+    id: Option<String>,
+) -> (String, Arc<SessionState>) {
+    // Fast path: find existing without creating.
+    if let Some(id) = id.clone()
+        && let Some(existing) = state.sessions.lock().await.get(&id).cloned()
+    {
+        return (id, existing);
+    }
+
+    // Otherwise, create a new session id (or re-use provided) and wire tasks.
+    let session_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    // Double-checked insert: if another task created it in between, return that.
+    {
+        let existing = state.sessions.lock().await.get(&session_id).cloned();
+        if let Some(existing) = existing {
+            return (session_id, existing);
+        }
+    }
+
+    let (incoming_tx, mut incoming_rx) = mpsc::channel::<JSONRPCMessage>(CHANNEL_CAPACITY);
+    let (outgoing_tx, mut outgoing_rx) = mpsc::unbounded_channel::<OutgoingMessage>();
+    let (sse_tx, _sse_rx) = broadcast::channel::<String>(CHANNEL_CAPACITY);
+
+    let session = Arc::new(SessionState {
+        incoming_tx,
+        sse_tx,
+        pending: tokio::sync::Mutex::new(HashMap::new()),
+    });
+
+    // Spawn processor for this session.
+    let mut processor = MessageProcessor::new(
+        OutgoingMessageSender::new(outgoing_tx.clone()),
+        state.codex_linux_sandbox_exe.clone(),
+        Arc::clone(&state.config),
+    );
+    let session_id_for_proc = session_id.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = incoming_rx.recv().await {
+            match msg {
+                JSONRPCMessage::Request(r) => processor.process_request(r).await,
+                JSONRPCMessage::Response(r) => processor.process_response(r).await,
+                JSONRPCMessage::Notification(n) => processor.process_notification(n).await,
+                JSONRPCMessage::Error(e) => processor.process_error(e),
+            }
+        }
+        info!(session = %session_id_for_proc, "processor task exited (channel closed)");
+    });
+
+    // Bridge outgoing -> pending/sse for this session.
+    let session_for_bridge = Arc::clone(&session);
+    let session_id_for_bridge = session_id.clone();
+    tokio::spawn(async move {
+        while let Some(outgoing_message) = outgoing_rx.recv().await {
+            let msg: JSONRPCMessage = outgoing_message.into();
+            match serde_json::to_string(&msg) {
+                Ok(json) => {
+                    // Try to fulfill an awaiting HTTP request by id.
+                    let maybe_id = match &msg {
+                        JSONRPCMessage::Response(r) => Some(r.id.clone()),
+                        JSONRPCMessage::Error(e) => Some(e.id.clone()),
+                        _ => None,
+                    };
+
+                    if let Some(id) = maybe_id {
+                        let sender = {
+                            let mut guard = session_for_bridge.pending.lock().await;
+                            guard.remove(&id)
+                        };
+                        if let Some(tx) = sender {
+                            let _ = tx.send(json.clone());
+                        }
+                    }
+
+                    // Broadcast all messages to SSE subscribers as well.
+                    let _ = session_for_bridge.sse_tx.send(json);
+                }
+                Err(e) => error!("Failed to serialize JSONRPCMessage for HTTP/SSE: {e}"),
+            }
+        }
+        info!(session = %session_id_for_bridge, "HTTP bridge task exited (channel closed)");
+    });
+
+    // Publish into map and return.
+    {
+        let mut guard = state.sessions.lock().await;
+        guard.insert(session_id.clone(), Arc::clone(&session));
+    }
+
+    (session_id, session)
 }

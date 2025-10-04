@@ -66,10 +66,26 @@ pub(crate) async fn apply_patch(
                 .await;
             match rx_approve.await.unwrap_or_default() {
                 ReviewDecision::Approved | ReviewDecision::ApprovedForSession => {
-                    InternalApplyPatchInvocation::DelegateToExec(ApplyPatchExec {
-                        action,
-                        user_explicitly_approved_this_action: true,
-                    })
+                    // Apply the patch directly in-process and surface a concise message.
+                    let mut out: Vec<u8> = Vec::new();
+                    let mut err: Vec<u8> = Vec::new();
+                    match codex_apply_patch::apply_patch(&action.patch, &mut out, &mut err) {
+                        Ok(()) => {
+                            let output = String::from_utf8_lossy(&out).to_string();
+                            InternalApplyPatchInvocation::Output(Ok(output))
+                        }
+                        Err(e) => {
+                            let stderr = String::from_utf8_lossy(&err);
+                            let message = if stderr.trim().is_empty() {
+                                format!("apply_patch failed: {e}")
+                            } else {
+                                format!("apply_patch failed: {e}\n{stderr}")
+                            };
+                            InternalApplyPatchInvocation::Output(Err(
+                                FunctionCallError::RespondToModel(message),
+                            ))
+                        }
+                    }
                 }
                 ReviewDecision::Denied | ReviewDecision::Abort => {
                     InternalApplyPatchInvocation::Output(Err(FunctionCallError::RespondToModel(
