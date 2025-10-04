@@ -33,9 +33,11 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
+use tracing::Instrument;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
+use tracing::info_span;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::prelude::*;
@@ -49,6 +51,7 @@ pub(crate) mod message_processor;
 mod outgoing_message;
 mod patch_approval;
 mod redact;
+mod session_log;
 
 use crate::message_processor::MessageProcessor;
 use crate::outgoing_message::OutgoingMessage;
@@ -152,6 +155,7 @@ pub async fn run_main(
     let processor_handle = tokio::spawn({
         let outgoing_message_sender = OutgoingMessageSender::new(outgoing_tx);
         let mut processor = MessageProcessor::new(
+            "stdio".to_string(),
             outgoing_message_sender,
             codex_linux_sandbox_exe,
             std::sync::Arc::new(config),
@@ -320,6 +324,7 @@ async fn handle_post(
                 .unwrap_or("")
                 .to_lowercase();
             let wants_sse = accept_header.contains("text/event-stream");
+            mcp_session_info!(session_id, "HTTP POST: request wants_sse={}", wants_sse);
 
             if wants_sse {
                 // Subscribe first to avoid missing early events, then forward request.
@@ -383,10 +388,12 @@ async fn handle_post(
         }
         // Forward and acknowledge without waiting.
         JSONRPCMessage::Response(r) => {
+            mcp_session_info!(session_id, "HTTP POST: response");
             let _ = session.incoming_tx.send(JSONRPCMessage::Response(r)).await;
             (StatusCode::NO_CONTENT, response_headers).into_response()
         }
         JSONRPCMessage::Notification(n) => {
+            mcp_session_info!(session_id, "HTTP POST: notification");
             let _ = session
                 .incoming_tx
                 .send(JSONRPCMessage::Notification(n))
@@ -394,6 +401,7 @@ async fn handle_post(
             (StatusCode::NO_CONTENT, response_headers).into_response()
         }
         JSONRPCMessage::Error(e) => {
+            mcp_session_info!(session_id, "HTTP POST: error");
             let _ = session.incoming_tx.send(JSONRPCMessage::Error(e)).await;
             (StatusCode::NO_CONTENT, response_headers).into_response()
         }
@@ -409,7 +417,8 @@ async fn handle_sse(
         .get("mcp-session-id")
         .and_then(|v| v.to_str().ok())
         .map(std::string::ToString::to_string);
-    let (_session_id, session) = ensure_session(Arc::clone(&state), client_session).await;
+    let (session_id, session) = ensure_session(Arc::clone(&state), client_session).await;
+    mcp_session_info!(session_id, "HTTP GET: SSE subscribe");
 
     let rx = session.sse_tx.subscribe();
     let stream = tokio_stream::wrappers::BroadcastStream::new(rx).map(|res| {
@@ -456,56 +465,74 @@ async fn ensure_session(
 
     // Spawn processor for this session.
     let mut processor = MessageProcessor::new(
+        session_id.clone(),
         OutgoingMessageSender::new(outgoing_tx.clone()),
         state.codex_linux_sandbox_exe.clone(),
         Arc::clone(&state.config),
     );
     let session_id_for_proc = session_id.clone();
-    tokio::spawn(async move {
-        while let Some(msg) = incoming_rx.recv().await {
-            match msg {
-                JSONRPCMessage::Request(r) => processor.process_request(r).await,
-                JSONRPCMessage::Response(r) => processor.process_response(r).await,
-                JSONRPCMessage::Notification(n) => processor.process_notification(n).await,
-                JSONRPCMessage::Error(e) => processor.process_error(e),
+    let proc_span = info_span!("mcp_session", session_id = %session_id_for_proc);
+    tokio::spawn(
+        async move {
+            while let Some(msg) = incoming_rx.recv().await {
+                match msg {
+                    JSONRPCMessage::Request(r) => processor.process_request(r).await,
+                    JSONRPCMessage::Response(r) => processor.process_response(r).await,
+                    JSONRPCMessage::Notification(n) => processor.process_notification(n).await,
+                    JSONRPCMessage::Error(e) => processor.process_error(e),
+                }
             }
+            mcp_session_info!(
+                session_id_for_proc,
+                "processor task exited (channel closed)"
+            );
         }
-        info!(session = %session_id_for_proc, "processor task exited (channel closed)");
-    });
+        .instrument(proc_span),
+    );
 
     // Bridge outgoing -> pending/sse for this session.
     let session_for_bridge = Arc::clone(&session);
     let session_id_for_bridge = session_id.clone();
-    tokio::spawn(async move {
-        while let Some(outgoing_message) = outgoing_rx.recv().await {
-            let msg: JSONRPCMessage = outgoing_message.into();
-            match serde_json::to_string(&msg) {
-                Ok(json) => {
-                    // Try to fulfill an awaiting HTTP request by id.
-                    let maybe_id = match &msg {
-                        JSONRPCMessage::Response(r) => Some(r.id.clone()),
-                        JSONRPCMessage::Error(e) => Some(e.id.clone()),
-                        _ => None,
-                    };
-
-                    if let Some(id) = maybe_id {
-                        let sender = {
-                            let mut guard = session_for_bridge.pending.lock().await;
-                            guard.remove(&id)
+    let bridge_span = info_span!("mcp_session", session_id = %session_id_for_bridge);
+    tokio::spawn(
+        async move {
+            while let Some(outgoing_message) = outgoing_rx.recv().await {
+                let msg: JSONRPCMessage = outgoing_message.into();
+                match serde_json::to_string(&msg) {
+                    Ok(json) => {
+                        // Try to fulfill an awaiting HTTP request by id.
+                        let maybe_id = match &msg {
+                            JSONRPCMessage::Response(r) => Some(r.id.clone()),
+                            JSONRPCMessage::Error(e) => Some(e.id.clone()),
+                            _ => None,
                         };
-                        if let Some(tx) = sender {
-                            let _ = tx.send(json.clone());
-                        }
-                    }
 
-                    // Broadcast all messages to SSE subscribers as well.
-                    let _ = session_for_bridge.sse_tx.send(json);
+                        if let Some(id) = maybe_id {
+                            let sender = {
+                                let mut guard = session_for_bridge.pending.lock().await;
+                                guard.remove(&id)
+                            };
+                            if let Some(tx) = sender {
+                                let _ = tx.send(json.clone());
+                            }
+                        }
+
+                        // Broadcast all messages to SSE subscribers as well.
+                        let _ = session_for_bridge.sse_tx.send(json);
+                    }
+                    Err(e) => mcp_session_error!(
+                        session_id_for_bridge,
+                        "Failed to serialize JSONRPCMessage for HTTP/SSE: {e}"
+                    ),
                 }
-                Err(e) => error!("Failed to serialize JSONRPCMessage for HTTP/SSE: {e}"),
             }
+            mcp_session_info!(
+                session_id_for_bridge,
+                "HTTP bridge task exited (channel closed)"
+            );
         }
-        info!(session = %session_id_for_bridge, "HTTP bridge task exited (channel closed)");
-    });
+        .instrument(bridge_span),
+    );
 
     // Publish into map and return.
     {
