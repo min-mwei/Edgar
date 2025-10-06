@@ -16,6 +16,8 @@ anyhow = { workspace = true }
 askama = { workspace = true }
 async-channel = { workspace = true }
 async-trait = { workspace = true }
+azure_core = { workspace = true }
+azure_identity = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }

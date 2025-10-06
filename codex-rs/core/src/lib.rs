@@ -7,6 +7,7 @@
 
 mod apply_patch;
 pub mod auth;
+mod azure_auth;
 pub mod bash;
 mod chat_completions;
 mod client;

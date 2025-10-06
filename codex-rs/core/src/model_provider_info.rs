@@ -6,6 +6,7 @@
 //!      key. These override or extend the defaults at runtime.
 
 use crate::CodexAuth;
+use crate::azure_auth;
 use codex_app_server_protocol::AuthMode;
 use serde::Deserialize;
 use serde::Serialize;
@@ -14,6 +15,8 @@ use std::env::VarError;
 use std::time::Duration;
 
 use crate::error::EnvVarError;
+use reqwest::Url;
+use reqwest::header::AUTHORIZATION;
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_STREAM_MAX_RETRIES: u64 = 5;
 const DEFAULT_REQUEST_MAX_RETRIES: u64 = 4;
@@ -114,6 +117,13 @@ impl ModelProviderInfo {
             }
         };
 
+        let azure_token = if self.should_use_azure_entra_auth(effective_auth.as_ref()) {
+            let scope = self.azure_scope();
+            Some(azure_auth::acquire_access_token(scope.as_deref()).await?)
+        } else {
+            None
+        };
+
         let url = self.get_full_url(&effective_auth);
 
         let mut builder = client.post(url);
@@ -122,7 +132,13 @@ impl ModelProviderInfo {
             builder = builder.bearer_auth(auth.get_token().await?);
         }
 
-        Ok(self.apply_http_headers(builder))
+        builder = self.apply_http_headers(builder);
+
+        if let Some(token) = azure_token {
+            builder = builder.header(AUTHORIZATION, format!("Bearer {token}"));
+        }
+
+        Ok(builder)
     }
 
     fn get_query_string(&self) -> String {
@@ -175,6 +191,60 @@ impl ModelProviderInfo {
             .as_ref()
             .map(|base| matches_azure_responses_base_url(base))
             .unwrap_or(false)
+    }
+
+    fn should_use_azure_entra_auth(&self, auth: Option<&CodexAuth>) -> bool {
+        if auth.is_some() {
+            return false;
+        }
+
+        if !self.base_url_matches_azure_host() {
+            return false;
+        }
+
+        if self.has_static_auth_header() {
+            return false;
+        }
+
+        !self.env_auth_header_has_value()
+    }
+
+    fn has_static_auth_header(&self) -> bool {
+        self.http_headers
+            .as_ref()
+            .is_some_and(|headers| headers.keys().any(|key| is_auth_header(key)))
+    }
+
+    fn env_auth_header_has_value(&self) -> bool {
+        self.env_http_headers.as_ref().is_some_and(|headers| {
+            headers.iter().any(|(header, env_var)| {
+                if !is_auth_header(header) {
+                    return false;
+                }
+
+                std::env::var(env_var)
+                    .map(|value| !value.trim().is_empty())
+                    .unwrap_or(false)
+            })
+        })
+    }
+
+    fn base_url_matches_azure_host(&self) -> bool {
+        self.base_url
+            .as_ref()
+            .map(|base| matches_azure_responses_base_url(base))
+            .unwrap_or(false)
+    }
+
+    fn azure_scope(&self) -> Option<String> {
+        self.base_url
+            .as_ref()
+            .and_then(|base| {
+                Url::parse(base)
+                    .ok()
+                    .and_then(|url| url.host_str().map(azure_auth::scope_from_host))
+            })
+            .or_else(|| Some(azure_auth::default_scope().to_string()))
     }
 
     /// Apply provider-specific HTTP headers (both static and environment-based)
@@ -354,6 +424,13 @@ fn matches_azure_responses_base_url(base_url: &str) -> bool {
         "azurefd.",
     ];
     AZURE_MARKERS.iter().any(|marker| base.contains(marker))
+}
+
+fn is_auth_header(header: &str) -> bool {
+    matches!(
+        header.to_ascii_lowercase().as_str(),
+        "authorization" | "api-key" | "x-api-key"
+    )
 }
 
 #[cfg(test)]
