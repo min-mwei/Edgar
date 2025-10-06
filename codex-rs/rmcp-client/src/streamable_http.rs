@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -15,6 +16,7 @@ use mcp_types::InitializeResult;
 use mcp_types::ListToolsRequestParams;
 use mcp_types::ListToolsResult;
 use reqwest::Client;
+use reqwest::StatusCode;
 use reqwest::header::ACCEPT;
 use reqwest::header::CONTENT_TYPE;
 use serde::Serialize;
@@ -51,6 +53,7 @@ struct Inner {
     /// Stored bearer token without the `Bearer ` prefix.
     auth_token: Option<String>,
     next_id: AtomicU64,
+    background_stream_disabled: AtomicBool,
     session_id: Mutex<Option<String>>,
     pending: Mutex<HashMap<String, oneshot::Sender<Value>>>,
     stream_task: Mutex<Option<JoinHandle<()>>>,
@@ -95,6 +98,7 @@ impl StreamableHttpClient {
                 url,
                 auth_token,
                 next_id: AtomicU64::new(1),
+                background_stream_disabled: AtomicBool::new(false),
                 session_id: Mutex::new(None),
                 pending: Mutex::new(HashMap::new()),
                 stream_task: Mutex::new(None),
@@ -465,9 +469,17 @@ impl Inner {
     }
 
     async fn ensure_stream_listener(self: &Arc<Self>) -> Result<()> {
-        let mut guard = self.stream_task.lock().await;
-        if guard.is_some() {
+        if self.background_stream_disabled.load(Ordering::Relaxed) {
             return Ok(());
+        }
+
+        let mut guard = self.stream_task.lock().await;
+        if let Some(handle) = guard.as_ref() {
+            if handle.is_finished() {
+                guard.take();
+            } else {
+                return Ok(());
+            }
         }
 
         let session_id = self
@@ -478,8 +490,13 @@ impl Inner {
             .ok_or_else(|| anyhow!("missing MCP session id for streamable HTTP listener"))?;
 
         let this = Arc::clone(self);
+        let weak = Arc::downgrade(self);
         let handle = tokio::spawn(async move {
             this.run_stream_listener(session_id).await;
+            if let Some(inner) = weak.upgrade() {
+                let mut guard = inner.stream_task.lock().await;
+                guard.take();
+            }
         });
         *guard = Some(handle);
         Ok(())
@@ -487,6 +504,10 @@ impl Inner {
 
     async fn run_stream_listener(self: Arc<Self>, session_id: String) {
         loop {
+            if self.background_stream_disabled.load(Ordering::Relaxed) {
+                return;
+            }
+
             let mut request = self
                 .client
                 .get(self.url.clone())
@@ -507,8 +528,28 @@ impl Inner {
             };
 
             if !response.status().is_success() {
+                let status = response.status();
+                if matches!(
+                    status,
+                    StatusCode::BAD_REQUEST
+                        | StatusCode::FORBIDDEN
+                        | StatusCode::NOT_FOUND
+                        | StatusCode::METHOD_NOT_ALLOWED
+                ) {
+                    if !self
+                        .background_stream_disabled
+                        .swap(true, Ordering::Relaxed)
+                    {
+                        warn!(
+                            status = %status,
+                            "disabling streamable HTTP background event stream after server rejection"
+                        );
+                    }
+                    return;
+                }
+
                 warn!(
-                    status = %response.status(),
+                    status = %status,
                     "streamable HTTP event stream returned non-success status"
                 );
                 time::sleep(Duration::from_secs(1)).await;
