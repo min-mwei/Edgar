@@ -16,6 +16,7 @@ use crate::mcp_session_trace;
 use crate::mcp_session_warn;
 use codex_core::AuthManager;
 use codex_core::ConversationManager;
+use codex_core::McpConnectionManager;
 use codex_core::config::Config;
 use codex_core::default_client::USER_AGENT_SUFFIX;
 use codex_core::default_client::get_codex_user_agent;
@@ -47,6 +48,7 @@ pub(crate) struct MessageProcessor {
     initialized: bool,
     codex_linux_sandbox_exe: Option<PathBuf>,
     conversation_manager: Arc<ConversationManager>,
+    mcp_connection_manager: Arc<McpConnectionManager>,
     running_requests_id_to_codex_uuid: Arc<Mutex<HashMap<RequestId, ConversationId>>>,
 }
 
@@ -58,6 +60,7 @@ impl MessageProcessor {
         outgoing: OutgoingMessageSender,
         codex_linux_sandbox_exe: Option<PathBuf>,
         config: Arc<Config>,
+        mcp_connection_manager: Arc<McpConnectionManager>,
     ) -> Self {
         let outgoing = Arc::new(outgoing);
         let auth_manager = AuthManager::shared(config.codex_home.clone(), false);
@@ -69,6 +72,7 @@ impl MessageProcessor {
             initialized: false,
             codex_linux_sandbox_exe,
             conversation_manager,
+            mcp_connection_manager,
             running_requests_id_to_codex_uuid: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -344,18 +348,63 @@ impl MessageProcessor {
                 self.handle_tool_call_codex_session_reply(id, arguments)
                     .await
             }
-            _ => {
-                let result = CallToolResult {
-                    content: vec![ContentBlock::TextContent(TextContent {
-                        r#type: "text".to_string(),
-                        text: format!("Unknown tool '{name}'"),
-                        annotations: None,
-                    })],
-                    is_error: Some(true),
-                    structured_content: None,
-                };
-                self.send_response::<mcp_types::CallToolRequest>(id, result)
-                    .await;
+            other => {
+                if let Some((server_name, tool_name)) =
+                    self.mcp_connection_manager.parse_tool_name(other)
+                {
+                    mcp_session_info!(
+                        self.session_id,
+                        "forwarding tool call to {server_name}/{tool_name}",
+                    );
+
+                    match self
+                        .mcp_connection_manager
+                        .call_tool(&server_name, &tool_name, arguments)
+                        .await
+                    {
+                        Ok(result) => {
+                            self.send_response::<mcp_types::CallToolRequest>(id, result)
+                                .await;
+                        }
+                        Err(err) => {
+                            mcp_session_warn!(
+                                self.session_id,
+                                "tool call failed for {server_name}/{tool_name}: {err:#}",
+                            );
+                            let result = CallToolResult {
+                                content: vec![ContentBlock::TextContent(TextContent {
+                                    r#type: "text".to_string(),
+                                    text: format!(
+                                        "tool call failed for `{server_name}/{tool_name}`: {err:#}"
+                                    ),
+                                    annotations: None,
+                                })],
+                                is_error: Some(true),
+                                structured_content: None,
+                            };
+                            self.send_response::<mcp_types::CallToolRequest>(id, result)
+                                .await;
+                        }
+                    }
+                } else {
+                    let text = if other.starts_with("remote_http__") {
+                        "Remote MCP tools are managed internally by Codex and are not exposed directly to clients.".to_string()
+                    } else {
+                        format!("Unknown tool '{other}'")
+                    };
+
+                    let result = CallToolResult {
+                        content: vec![ContentBlock::TextContent(TextContent {
+                            r#type: "text".to_string(),
+                            text,
+                            annotations: None,
+                        })],
+                        is_error: Some(true),
+                        structured_content: None,
+                    };
+                    self.send_response::<mcp_types::CallToolRequest>(id, result)
+                        .await;
+                }
             }
         }
     }

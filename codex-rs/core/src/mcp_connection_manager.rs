@@ -172,7 +172,7 @@ impl McpClientAdapter {
 
 /// A thin wrapper around a set of running [`McpClient`] instances.
 #[derive(Default)]
-pub(crate) struct McpConnectionManager {
+pub struct McpConnectionManager {
     /// Server-name -> client instance.
     ///
     /// The server name originates from the keys of the `mcp_servers` map in

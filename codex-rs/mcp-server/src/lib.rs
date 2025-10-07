@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use codex_common::CliConfigOverrides;
+use codex_core::McpConnectionManager;
 use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
 
@@ -103,6 +104,28 @@ fn init_tracing() -> IoResult<()> {
     Ok(())
 }
 
+async fn create_mcp_connection_manager(config: &Config) -> Arc<McpConnectionManager> {
+    match McpConnectionManager::new(
+        config.mcp_servers.clone(),
+        config.use_experimental_use_rmcp_client,
+    )
+    .await
+    {
+        Ok((manager, failures)) => {
+            if !failures.is_empty() {
+                for (server_name, err) in failures {
+                    error!("MCP client for `{server_name}` failed to start: {err:#}");
+                }
+            }
+            Arc::new(manager)
+        }
+        Err(err) => {
+            error!("Failed to create MCP connection manager: {err:#}");
+            Arc::new(McpConnectionManager::default())
+        }
+    }
+}
+
 pub async fn run_main(
     codex_linux_sandbox_exe: Option<PathBuf>,
     cli_config_overrides: CliConfigOverrides,
@@ -151,6 +174,9 @@ pub async fn run_main(
             std::io::Error::new(ErrorKind::InvalidData, format!("error loading config: {e}"))
         })?;
 
+    let mcp_connection_manager = create_mcp_connection_manager(&config).await;
+    let config = Arc::new(config);
+
     // Task: process incoming messages.
     let processor_handle = tokio::spawn({
         let outgoing_message_sender = OutgoingMessageSender::new(outgoing_tx);
@@ -158,7 +184,8 @@ pub async fn run_main(
             "stdio".to_string(),
             outgoing_message_sender,
             codex_linux_sandbox_exe,
-            std::sync::Arc::new(config),
+            Arc::clone(&config),
+            Arc::clone(&mcp_connection_manager),
         );
         async move {
             while let Some(msg) = incoming_rx.recv().await {
@@ -220,6 +247,7 @@ struct HttpMultiState {
     /// Fixed process-wide components used to create new sessions.
     codex_linux_sandbox_exe: Option<PathBuf>,
     config: Arc<Config>,
+    mcp_connection_manager: Arc<McpConnectionManager>,
 }
 
 /// Run the MCP server over HTTP on the specified bind address.
@@ -247,11 +275,15 @@ pub async fn run_http_server(
             std::io::Error::new(ErrorKind::InvalidData, format!("error loading config: {e}"))
         })?;
 
+    let mcp_connection_manager = create_mcp_connection_manager(&config).await;
+    let config = Arc::new(config);
+
     // Shared HTTP state (multi-session).
     let state = Arc::new(HttpMultiState {
         sessions: tokio::sync::Mutex::new(HashMap::new()),
         codex_linux_sandbox_exe,
-        config: Arc::new(config),
+        config: Arc::clone(&config),
+        mcp_connection_manager,
     });
 
     // Build HTTP router.
@@ -469,6 +501,7 @@ async fn ensure_session(
         OutgoingMessageSender::new(outgoing_tx.clone()),
         state.codex_linux_sandbox_exe.clone(),
         Arc::clone(&state.config),
+        Arc::clone(&state.mcp_connection_manager),
     );
     let session_id_for_proc = session_id.clone();
     let proc_span = info_span!("mcp_session", session_id = %session_id_for_proc);

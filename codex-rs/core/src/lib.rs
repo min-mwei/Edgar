@@ -107,4 +107,6 @@ pub use codex_protocol::models::LocalShellStatus;
 pub use codex_protocol::models::ReasoningItemContent;
 pub use codex_protocol::models::ResponseItem;
 
+pub use mcp_connection_manager::McpConnectionManager;
+
 pub mod otel_init;
