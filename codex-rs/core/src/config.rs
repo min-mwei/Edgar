@@ -377,6 +377,10 @@ pub fn write_global_mcp_servers(
                 }
             }
 
+            if !config.enabled {
+                entry["enabled"] = toml_edit::value(false);
+            }
+
             if let Some(timeout) = config.startup_timeout_sec {
                 entry["startup_timeout_sec"] = toml_edit::value(timeout.as_secs_f64());
             }
@@ -1409,6 +1413,7 @@ exclude_slash_tmp = true
                     args: vec!["hello".to_string()],
                     env: None,
                 },
+                enabled: true,
                 startup_timeout_sec: Some(Duration::from_secs(3)),
                 tool_timeout_sec: Some(Duration::from_secs(5)),
             },
@@ -1429,6 +1434,7 @@ exclude_slash_tmp = true
         }
         assert_eq!(docs.startup_timeout_sec, Some(Duration::from_secs(3)));
         assert_eq!(docs.tool_timeout_sec, Some(Duration::from_secs(5)));
+        assert!(docs.enabled);
 
         let empty = BTreeMap::new();
         write_global_mcp_servers(codex_home.path(), &empty)?;
@@ -1508,6 +1514,7 @@ startup_timeout_ms = 2500
                         ("ALPHA_VAR".to_string(), "1".to_string()),
                     ])),
                 },
+                enabled: true,
                 startup_timeout_sec: None,
                 tool_timeout_sec: None,
             },
@@ -1559,6 +1566,7 @@ ZIG_VAR = "3"
                     bearer_token: Some("secret-token".to_string()),
                     bearer_token_env_var: None,
                 },
+                enabled: true,
                 startup_timeout_sec: Some(Duration::from_secs(2)),
                 tool_timeout_sec: None,
             },
@@ -1602,6 +1610,7 @@ startup_timeout_sec = 2.0
                     bearer_token: None,
                     bearer_token_env_var: Some("TOKEN_VAR".to_string()),
                 },
+                enabled: true,
                 startup_timeout_sec: None,
                 tool_timeout_sec: None,
             },
@@ -1632,6 +1641,40 @@ bearer_token_env_var = "TOKEN_VAR"
             }
             other => panic!("unexpected transport {other:?}"),
         }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn write_global_mcp_servers_serializes_disabled_flag() -> anyhow::Result<()> {
+        let codex_home = TempDir::new()?;
+
+        let servers = BTreeMap::from([(
+            "docs".to_string(),
+            McpServerConfig {
+                transport: McpServerTransportConfig::Stdio {
+                    command: "docs-server".to_string(),
+                    args: Vec::new(),
+                    env: None,
+                },
+                enabled: false,
+                startup_timeout_sec: None,
+                tool_timeout_sec: None,
+            },
+        )]);
+
+        write_global_mcp_servers(codex_home.path(), &servers)?;
+
+        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        let serialized = std::fs::read_to_string(&config_path)?;
+        assert!(
+            serialized.contains("enabled = false"),
+            "serialized config missing disabled flag:\n{serialized}"
+        );
+
+        let loaded = load_global_mcp_servers(codex_home.path()).await?;
+        let docs = loaded.get("docs").expect("docs entry");
+        assert!(!docs.enabled);
 
         Ok(())
     }
