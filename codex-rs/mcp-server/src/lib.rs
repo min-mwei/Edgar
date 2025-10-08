@@ -89,7 +89,7 @@ fn init_tracing() -> IoResult<()> {
     let env_filter = EnvFilter::from_default_env();
 
     let stderr_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stderr);
-    let file_writer_clone = file_writer.clone();
+    let file_writer_clone = file_writer;
     let file_layer = tracing_subscriber::fmt::layer()
         .with_ansi(false)
         .with_writer(move || crate::redact::SanitizingWriter::new(file_writer_clone.clone()));
@@ -108,6 +108,7 @@ async fn create_mcp_connection_manager(config: &Config) -> Arc<McpConnectionMana
     match McpConnectionManager::new(
         config.mcp_servers.clone(),
         config.use_experimental_use_rmcp_client,
+        config.mcp_oauth_credentials_store_mode,
     )
     .await
     {

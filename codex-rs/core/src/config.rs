@@ -33,6 +33,7 @@ use codex_protocol::config_types::ReasoningEffort;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::SandboxMode;
 use codex_protocol::config_types::Verbosity;
+use codex_rmcp_client::OAuthCredentialsStoreMode;
 use dirs::home_dir;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -141,6 +142,12 @@ pub struct Config {
 
     /// Definition for MCP servers that Codex can reach out to for tool calls.
     pub mcp_servers: HashMap<String, McpServerConfig>,
+
+    /// Preferred store for MCP OAuth credentials.
+    /// keyring: Use an OS-specific keyring service.
+    /// file: Store credentials in CODEX_HOME/.credentials.json.
+    /// auto (default): keyring if available, otherwise file.
+    pub mcp_oauth_credentials_store_mode: OAuthCredentialsStoreMode,
 
     /// Combined provider map (defaults merged with user-defined overrides).
     pub model_providers: HashMap<String, ModelProviderInfo>,
@@ -355,10 +362,17 @@ pub fn write_global_mcp_servers(
                         entry["env"] = TomlItem::Table(env_table);
                     }
                 }
-                McpServerTransportConfig::StreamableHttp { url, bearer_token } => {
+                McpServerTransportConfig::StreamableHttp {
+                    url,
+                    bearer_token,
+                    bearer_token_env_var,
+                } => {
                     entry["url"] = toml_edit::value(url.clone());
                     if let Some(token) = bearer_token {
                         entry["bearer_token"] = toml_edit::value(token.clone());
+                    }
+                    if let Some(env_var) = bearer_token_env_var {
+                        entry["bearer_token_env_var"] = toml_edit::value(env_var.clone());
                     }
                 }
             }
@@ -693,6 +707,13 @@ pub struct ConfigToml {
     /// Definition for MCP servers that Codex can reach out to for tool calls.
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
+
+    /// Preferred backend for storing MCP OAuth credentials.
+    /// keyring: Use an OS-specific keyring service.
+    /// file: Use a file in the Codex home directory.
+    /// auto (default): Use the OS-specific keyring service if available, otherwise use a file.
+    #[serde(default)]
+    pub mcp_oauth_credentials_store: Option<OAuthCredentialsStoreMode>,
 
     /// User-defined provider entries that extend/override the built-in list.
     #[serde(default)]
@@ -1074,6 +1095,7 @@ impl Config {
             user_instructions,
             base_instructions,
             mcp_servers: cfg.mcp_servers,
+            mcp_oauth_credentials_store_mode: cfg.mcp_oauth_credentials_store.unwrap_or_default(),
             model_providers,
             project_doc_max_bytes: cfg.project_doc_max_bytes.unwrap_or(PROJECT_DOC_MAX_BYTES),
             project_doc_fallback_filenames: cfg
@@ -1535,6 +1557,7 @@ ZIG_VAR = "3"
                 transport: McpServerTransportConfig::StreamableHttp {
                     url: "https://example.com/mcp".to_string(),
                     bearer_token: Some("secret-token".to_string()),
+                    bearer_token_env_var: None,
                 },
                 startup_timeout_sec: Some(Duration::from_secs(2)),
                 tool_timeout_sec: None,
@@ -1557,9 +1580,14 @@ startup_timeout_sec = 2.0
         let loaded = load_global_mcp_servers(codex_home.path()).await?;
         let docs = loaded.get("docs").expect("docs entry");
         match &docs.transport {
-            McpServerTransportConfig::StreamableHttp { url, bearer_token } => {
+            McpServerTransportConfig::StreamableHttp {
+                url,
+                bearer_token,
+                bearer_token_env_var,
+            } => {
                 assert_eq!(url, "https://example.com/mcp");
                 assert_eq!(bearer_token.as_deref(), Some("secret-token"));
+                assert!(bearer_token_env_var.is_none());
             }
             other => panic!("unexpected transport {other:?}"),
         }
@@ -1571,6 +1599,7 @@ startup_timeout_sec = 2.0
                 transport: McpServerTransportConfig::StreamableHttp {
                     url: "https://example.com/mcp".to_string(),
                     bearer_token: None,
+                    bearer_token_env_var: Some("TOKEN_VAR".to_string()),
                 },
                 startup_timeout_sec: None,
                 tool_timeout_sec: None,
@@ -1583,15 +1612,21 @@ startup_timeout_sec = 2.0
             serialized,
             r#"[mcp_servers.docs]
 url = "https://example.com/mcp"
+bearer_token_env_var = "TOKEN_VAR"
 "#
         );
 
         let loaded = load_global_mcp_servers(codex_home.path()).await?;
         let docs = loaded.get("docs").expect("docs entry");
         match &docs.transport {
-            McpServerTransportConfig::StreamableHttp { url, bearer_token } => {
+            McpServerTransportConfig::StreamableHttp {
+                url,
+                bearer_token,
+                bearer_token_env_var,
+            } => {
                 assert_eq!(url, "https://example.com/mcp");
                 assert!(bearer_token.is_none());
+                assert_eq!(bearer_token_env_var.as_deref(), Some("TOKEN_VAR"));
             }
             other => panic!("unexpected transport {other:?}"),
         }
@@ -1896,6 +1931,7 @@ model_verbosity = "high"
                 notify: None,
                 cwd: fixture.cwd(),
                 mcp_servers: HashMap::new(),
+                mcp_oauth_credentials_store_mode: Default::default(),
                 model_providers: fixture.model_provider_map.clone(),
                 project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
                 project_doc_fallback_filenames: Vec::new(),
@@ -1958,6 +1994,7 @@ model_verbosity = "high"
             notify: None,
             cwd: fixture.cwd(),
             mcp_servers: HashMap::new(),
+            mcp_oauth_credentials_store_mode: Default::default(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
             project_doc_fallback_filenames: Vec::new(),
@@ -2035,6 +2072,7 @@ model_verbosity = "high"
             notify: None,
             cwd: fixture.cwd(),
             mcp_servers: HashMap::new(),
+            mcp_oauth_credentials_store_mode: Default::default(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
             project_doc_fallback_filenames: Vec::new(),
@@ -2098,6 +2136,7 @@ model_verbosity = "high"
             notify: None,
             cwd: fixture.cwd(),
             mcp_servers: HashMap::new(),
+            mcp_oauth_credentials_store_mode: Default::default(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
             project_doc_fallback_filenames: Vec::new(),

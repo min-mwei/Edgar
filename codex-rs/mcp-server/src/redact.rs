@@ -47,8 +47,7 @@ pub(crate) fn redact_sensitive(input: &str) -> String {
 
     // Perform redaction for common casing variants.
     let s1 = redact_once(input, "Bearer ");
-    let s2 = redact_once(&s1, "bearer ");
-    s2
+    redact_once(&s1, "bearer ")
 }
 
 /// Writer wrapper that redacts sensitive substrings (e.g., Bearer tokens)
