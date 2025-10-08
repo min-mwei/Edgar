@@ -13,6 +13,8 @@ use codex_core::config::load_global_mcp_servers;
 use codex_core::config::write_global_mcp_servers;
 use codex_core::config_types::McpServerConfig;
 use codex_core::config_types::McpServerTransportConfig;
+use codex_core::mcp::auth::compute_auth_statuses;
+use codex_core::protocol::McpAuthStatus;
 use codex_rmcp_client::delete_oauth_tokens;
 use codex_rmcp_client::perform_oauth_login;
 
@@ -362,11 +364,20 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
 
     let mut entries: Vec<_> = config.mcp_servers.iter().collect();
     entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+    let auth_statuses = compute_auth_statuses(
+        config.mcp_servers.iter(),
+        config.mcp_oauth_credentials_store_mode,
+    )
+    .await;
 
     if list_args.json {
         let json_entries: Vec<_> = entries
             .into_iter()
             .map(|(name, cfg)| {
+                let auth_status = auth_statuses
+                    .get(name.as_str())
+                    .copied()
+                    .unwrap_or(McpAuthStatus::Unsupported);
                 let transport = match &cfg.transport {
                     McpServerTransportConfig::Stdio { command, args, env } => serde_json::json!({
                         "type": "stdio",
@@ -398,6 +409,7 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
                     "tool_timeout_sec": cfg
                         .tool_timeout_sec
                         .map(|timeout| timeout.as_secs_f64()),
+                    "auth_status": auth_status,
                 })
             })
             .collect();
@@ -411,8 +423,8 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
         return Ok(());
     }
 
-    let mut stdio_rows: Vec<[String; 5]> = Vec::new();
-    let mut http_rows: Vec<[String; 4]> = Vec::new();
+    let mut stdio_rows: Vec<[String; 6]> = Vec::new();
+    let mut http_rows: Vec<[String; 5]> = Vec::new();
 
     for (name, cfg) in entries {
         match &cfg.transport {
@@ -440,12 +452,18 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
                 } else {
                     "disabled".to_string()
                 };
+                let auth_status = auth_statuses
+                    .get(name.as_str())
+                    .copied()
+                    .unwrap_or(McpAuthStatus::Unsupported)
+                    .to_string();
                 stdio_rows.push([
                     name.clone(),
                     command.clone(),
                     args_display,
                     env_display,
                     status,
+                    auth_status,
                 ]);
             }
             McpServerTransportConfig::StreamableHttp {
@@ -465,7 +483,18 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
                 } else {
                     "disabled".to_string()
                 };
-                http_rows.push([name.clone(), url.clone(), token_display, status]);
+                let auth_status = auth_statuses
+                    .get(name.as_str())
+                    .copied()
+                    .unwrap_or(McpAuthStatus::Unsupported)
+                    .to_string();
+                http_rows.push([
+                    name.clone(),
+                    url.clone(),
+                    token_display,
+                    status,
+                    auth_status,
+                ]);
             }
         }
     }
@@ -477,6 +506,7 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
             "Args".len(),
             "Env".len(),
             "Status".len(),
+            "Auth".len(),
         ];
         for row in &stdio_rows {
             for (i, cell) in row.iter().enumerate() {
@@ -485,32 +515,36 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
         }
 
         println!(
-            "{:<name_w$}  {:<cmd_w$}  {:<args_w$}  {:<env_w$}  {:<status_w$}",
-            "Name",
-            "Command",
-            "Args",
-            "Env",
-            "Status",
+            "{name:<name_w$}  {command:<cmd_w$}  {args:<args_w$}  {env:<env_w$}  {status:<status_w$}  {auth:<auth_w$}",
+            name = "Name",
+            command = "Command",
+            args = "Args",
+            env = "Env",
+            status = "Status",
+            auth = "Auth",
             name_w = widths[0],
             cmd_w = widths[1],
             args_w = widths[2],
             env_w = widths[3],
             status_w = widths[4],
+            auth_w = widths[5],
         );
 
         for row in &stdio_rows {
             println!(
-                "{:<name_w$}  {:<cmd_w$}  {:<args_w$}  {:<env_w$}  {:<status_w$}",
-                row[0],
-                row[1],
-                row[2],
-                row[3],
-                row[4],
+                "{name:<name_w$}  {command:<cmd_w$}  {args:<args_w$}  {env:<env_w$}  {status:<status_w$}  {auth:<auth_w$}",
+                name = row[0].as_str(),
+                command = row[1].as_str(),
+                args = row[2].as_str(),
+                env = row[3].as_str(),
+                status = row[4].as_str(),
+                auth = row[5].as_str(),
                 name_w = widths[0],
                 cmd_w = widths[1],
                 args_w = widths[2],
                 env_w = widths[3],
                 status_w = widths[4],
+                auth_w = widths[5],
             );
         }
     }
@@ -520,11 +554,13 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
     }
 
     if !http_rows.is_empty() {
+        let token_header = "Bearer Token";
         let mut widths = [
             "Name".len(),
             "Url".len(),
-            "Bearer Token".len(),
+            token_header.len(),
             "Status".len(),
+            "Auth".len(),
         ];
         for row in &http_rows {
             for (i, cell) in row.iter().enumerate() {
@@ -533,28 +569,32 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
         }
 
         println!(
-            "{:<name_w$}  {:<url_w$}  {:<token_w$}  {:<status_w$}",
-            "Name",
-            "Url",
-            "Bearer Token",
-            "Status",
+            "{name:<name_w$}  {url:<url_w$}  {token:<token_w$}  {status:<status_w$}  {auth:<auth_w$}",
+            name = "Name",
+            url = "Url",
+            token = token_header,
+            status = "Status",
+            auth = "Auth",
             name_w = widths[0],
             url_w = widths[1],
             token_w = widths[2],
             status_w = widths[3],
+            auth_w = widths[4],
         );
 
         for row in &http_rows {
             println!(
-                "{:<name_w$}  {:<url_w$}  {:<token_w$}  {:<status_w$}",
-                row[0],
-                row[1],
-                row[2],
-                row[3],
+                "{name:<name_w$}  {url:<url_w$}  {token:<token_w$}  {status:<status_w$}  {auth:<auth_w$}",
+                name = row[0].as_str(),
+                url = row[1].as_str(),
+                token = row[2].as_str(),
+                status = row[3].as_str(),
+                auth = row[4].as_str(),
                 name_w = widths[0],
                 url_w = widths[1],
                 token_w = widths[2],
                 status_w = widths[3],
+                auth_w = widths[4],
             );
         }
     }
