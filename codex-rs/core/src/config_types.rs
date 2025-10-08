@@ -529,7 +529,7 @@ mod tests {
             McpServerTransportConfig::StreamableHttp {
                 url: "https://example.com/mcp".to_string(),
                 bearer_token: None,
-                bearer_token_env_var: None
+                bearer_token_env_var: None,
             }
         );
     }
@@ -549,7 +549,7 @@ mod tests {
             McpServerTransportConfig::StreamableHttp {
                 url: "https://example.com/mcp".to_string(),
                 bearer_token: Some("secret".to_string()),
-                bearer_token_env_var: None
+                bearer_token_env_var: None,
             }
         );
     }
@@ -569,7 +569,7 @@ mod tests {
             McpServerTransportConfig::StreamableHttp {
                 url: "https://example.com/mcp".to_string(),
                 bearer_token: None,
-                bearer_token_env_var: Some("GITHUB_TOKEN".to_string())
+                bearer_token_env_var: Some("GITHUB_TOKEN".to_string()),
             }
         );
     }

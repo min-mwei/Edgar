@@ -1584,6 +1584,7 @@ startup_timeout_sec = 2.0
                 url,
                 bearer_token,
                 bearer_token_env_var,
+                ..
             } => {
                 assert_eq!(url, "https://example.com/mcp");
                 assert_eq!(bearer_token.as_deref(), Some("secret-token"));
@@ -1623,6 +1624,7 @@ bearer_token_env_var = "TOKEN_VAR"
                 url,
                 bearer_token,
                 bearer_token_env_var,
+                ..
             } => {
                 assert_eq!(url, "https://example.com/mcp");
                 assert!(bearer_token.is_none());

@@ -6,6 +6,14 @@ use crate::error::CodexErr;
 use crate::error::Result;
 
 const DEFAULT_AZURE_SCOPE: &str = "https://cognitiveservices.azure.com/.default";
+const AZURE_HOST_MARKERS: [&str; 5] = [
+    "openai.azure.",
+    "cognitiveservices.azure.",
+    "aoai.azure.",
+    "azure-api.",
+    "azurefd.",
+];
+const DEFAULT_MANAGEMENT_SCOPE: &str = "https://management.core.windows.net/.default";
 
 /// Acquire an Azure Active Directory access token using the default credential chain.
 ///
@@ -37,6 +45,17 @@ pub fn scope_from_host(host: &str) -> String {
         .unwrap_or_else(|| DEFAULT_AZURE_SCOPE.to_string())
 }
 
+pub fn host_supports_default_credential(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    AZURE_HOST_MARKERS
+        .iter()
+        .any(|marker| host.contains(marker))
+}
+
 pub fn default_scope() -> &'static str {
     DEFAULT_AZURE_SCOPE
+}
+
+pub fn default_management_scope() -> &'static str {
+    DEFAULT_MANAGEMENT_SCOPE
 }

@@ -905,9 +905,7 @@ pub(crate) fn new_mcp_tools_output(
                     (_, Some(env)) => env.clone(),
                     (None, None) => "-".to_string(),
                 };
-                lines.push(
-                    vec!["    • Bearer Token: ".into(), token_description.into()].into(),
-                );
+                lines.push(vec!["    • Bearer Token: ".into(), token_description.into()].into());
             }
         }
 

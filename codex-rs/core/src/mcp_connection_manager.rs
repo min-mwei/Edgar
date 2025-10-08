@@ -33,6 +33,7 @@ use tokio::task::JoinSet;
 use tracing::info;
 use tracing::warn;
 
+use crate::azure_auth;
 use crate::config_types::McpServerConfig;
 use crate::config_types::McpServerTransportConfig;
 
@@ -252,14 +253,21 @@ impl McpConnectionManager {
 
             let direct_bearer_token = match &cfg.transport {
                 McpServerTransportConfig::StreamableHttp {
+                    url,
                     bearer_token,
                     bearer_token_env_var,
                     ..
                 } => {
-                    if bearer_token.is_some() {
-                        bearer_token.clone()
+                    if let Some(token) = bearer_token.clone() {
+                        Some(token)
                     } else {
-                        match resolve_bearer_token(&server_name, bearer_token_env_var.as_deref()) {
+                        match resolve_bearer_token(
+                            &server_name,
+                            url,
+                            bearer_token_env_var.as_deref(),
+                        )
+                        .await
+                        {
                             Ok(token) => token,
                             Err(err) => {
                                 errors.insert(server_name.clone(), err);
@@ -403,32 +411,69 @@ impl McpConnectionManager {
     }
 }
 
-fn resolve_bearer_token(
+async fn resolve_bearer_token(
     server_name: &str,
+    url: &str,
     bearer_token_env_var: Option<&str>,
 ) -> Result<Option<String>> {
-    let Some(env_var) = bearer_token_env_var else {
-        return Ok(None);
-    };
-
-    match env::var(env_var) {
-        Ok(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                Err(anyhow!(
-                    "Environment variable {env_var} for MCP server '{server_name}' is empty"
-                ))
-            } else {
-                Ok(Some(trimmed.to_string()))
+    if let Some(env_var) = bearer_token_env_var {
+        return match env::var(env_var) {
+            Ok(value) => {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    Err(anyhow!(
+                        "Environment variable {env_var} for MCP server '{server_name}' is empty"
+                    ))
+                } else {
+                    Ok(Some(trimmed.to_string()))
+                }
             }
-        }
-        Err(env::VarError::NotPresent) => Err(anyhow!(
-            "Environment variable {env_var} for MCP server '{server_name}' is not set"
-        )),
-        Err(env::VarError::NotUnicode(_)) => Err(anyhow!(
-            "Environment variable {env_var} for MCP server '{server_name}' contains invalid Unicode"
-        )),
+            Err(env::VarError::NotPresent) => Err(anyhow!(
+                "Environment variable {env_var} for MCP server '{server_name}' is not set"
+            )),
+            Err(env::VarError::NotUnicode(_)) => Err(anyhow!(
+                "Environment variable {env_var} for MCP server '{server_name}' contains invalid Unicode"
+            )),
+        };
     }
+
+    let parsed = reqwest::Url::parse(url).with_context(|| {
+        format!("failed to parse streamable HTTP URL `{url}` for MCP server `{server_name}`")
+    })?;
+
+    let host = parsed.host_str().ok_or_else(|| {
+        anyhow!("streamable HTTP URL `{url}` for MCP server `{server_name}` is missing a host")
+    })?;
+
+    let scope = if azure_auth::host_supports_default_credential(host) {
+        azure_auth::scope_from_host(host)
+    } else {
+        let management_scope = azure_auth::default_management_scope();
+        info!(
+            server = %server_name,
+            host = host,
+            scope = management_scope,
+            "MCP server host not recognized as Azure; using Azure management scope"
+        );
+        management_scope.to_string()
+    };
+    let token = acquire_azure_token_for_scope(server_name, &scope).await?;
+
+    Ok(Some(token))
+}
+
+#[cfg(not(test))]
+async fn acquire_azure_token_for_scope(server_name: &str, scope: &str) -> Result<String> {
+    azure_auth::acquire_access_token(Some(scope))
+        .await
+        .map_err(|error| {
+            anyhow!("failed to acquire Azure access token for MCP server `{server_name}`: {error}")
+        })
+}
+
+#[cfg(test)]
+async fn acquire_azure_token_for_scope(server_name: &str, scope: &str) -> Result<String> {
+    Ok(format!("test-token-for-{server_name}-{scope}"))
 }
 
 /// Query every server for its available tools and return a single map that
@@ -576,6 +621,22 @@ mod tests {
         assert_eq!(
             keys[1],
             "my_server__yet_another_e1c3987bd9c50b826cbe1687966f79f0c602d19ca"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_bearer_token_uses_azure_default_when_missing() {
+        let server_name = "azure-server";
+        let url = "https://workspace.cognitiveservices.azure.com/mcp";
+
+        let token = resolve_bearer_token(server_name, url, None)
+            .await
+            .expect("azure default auth should provide a token");
+
+        let expected_scope = "https://cognitiveservices.azure.com/.default";
+        assert_eq!(
+            token,
+            Some(format!("test-token-for-{server_name}-{expected_scope}"))
         );
     }
 }
