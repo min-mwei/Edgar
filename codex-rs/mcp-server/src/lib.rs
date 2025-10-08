@@ -31,6 +31,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::io::{self};
 use tokio::net::TcpListener;
+use tokio::signal;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -225,6 +226,15 @@ pub async fn run_main(
         info!("stdout writer exited (channel closed)");
     });
 
+    // Ensure Ctrl-C consistently terminates the MCP server, even when running under wrappers.
+    let _ctrl_c_handle = tokio::spawn(async {
+        if signal::ctrl_c().await.is_ok() {
+            info!("received Ctrl-C (SIGINT); shutting down codex MCP server");
+            // Exit with the conventional 130 status so wrappers do not leave the process hanging.
+            std::process::exit(130);
+        }
+    });
+
     // Wait for all tasks to finish.  The typical exit path is the stdin reader
     // hitting EOF which, once it drops `incoming_tx`, propagates shutdown to
     // the processor and then to the stdout task.
@@ -307,6 +317,14 @@ pub async fn run_http_server(
         )
     })?;
     info!("codex MCP server (HTTP) listening on {bind_addr}");
+
+    let _ctrl_c_handle = tokio::spawn(async move {
+        if signal::ctrl_c().await.is_ok() {
+            info!("received Ctrl-C (SIGINT); shutting down codex MCP HTTP server");
+            std::process::exit(130);
+        }
+    });
+
     axum::serve(listener, app)
         .await
         .map_err(|e| std::io::Error::other(format!("server error: {e}")))?;
