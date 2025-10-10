@@ -88,7 +88,6 @@ use crate::protocol::ReviewDecision;
 use crate::protocol::ReviewOutputEvent;
 use crate::protocol::SandboxPolicy;
 use crate::protocol::SessionConfiguredEvent;
-use crate::protocol::SessionRenamedEvent;
 use crate::protocol::StreamErrorEvent;
 use crate::protocol::Submission;
 use crate::protocol::TokenCountEvent;
@@ -1508,16 +1507,6 @@ async fn submission_loop(
                 };
                 sess.send_event(event).await;
             }
-            Op::SetSessionName { name } => {
-                // Persist a rename event and notify the client. We rely on the
-                // recorder's filtering to include this in the rollout.
-                let sub_id = sub.id.clone();
-                let event = Event {
-                    id: sub_id,
-                    msg: EventMsg::SessionRenamed(SessionRenamedEvent { name }),
-                };
-                sess.send_event(event).await;
-            }
             Op::Review { review_request } => {
                 spawn_review_thread(
                     sess.clone(),
@@ -2019,9 +2008,7 @@ async fn run_turn(
                     // at a seemingly frozen screen.
                     sess.notify_stream_error(
                         &sub_id,
-                        format!(
-                            "stream error: {e}; retrying {retries}/{max_retries} in {delay:?}…"
-                        ),
+                        format!("Re-connecting... {retries}/{max_retries}"),
                     )
                     .await;
 
