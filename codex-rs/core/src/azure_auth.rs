@@ -13,7 +13,6 @@ const AZURE_HOST_MARKERS: [&str; 5] = [
     "azure-api.",
     "azurefd.",
 ];
-const DEFAULT_MANAGEMENT_SCOPE: &str = "https://management.core.windows.net/.default";
 
 /// Acquire an Azure Active Directory access token using the default credential chain.
 ///
@@ -54,8 +53,4 @@ pub fn host_supports_default_credential(host: &str) -> bool {
 
 pub fn default_scope() -> &'static str {
     DEFAULT_AZURE_SCOPE
-}
-
-pub fn default_management_scope() -> &'static str {
-    DEFAULT_MANAGEMENT_SCOPE
 }

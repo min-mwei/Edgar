@@ -449,21 +449,20 @@ async fn resolve_bearer_token(
         anyhow!("streamable HTTP URL `{url}` for MCP server `{server_name}` is missing a host")
     })?;
 
-    let scope = if azure_auth::host_supports_default_credential(host) {
-        azure_auth::scope_from_host(host)
+    // Only attempt Azure Default Credential for known Azure hosts. For any other host,
+    // connect without a bearer token by default.
+    if azure_auth::host_supports_default_credential(host) {
+        let scope = azure_auth::scope_from_host(host);
+        let token = acquire_azure_token_for_scope(server_name, &scope).await?;
+        Ok(Some(token))
     } else {
-        let management_scope = azure_auth::default_management_scope();
         info!(
             server = %server_name,
             host = host,
-            scope = management_scope,
-            "MCP server host not recognized as Azure; using Azure management scope"
+            "MCP server host not recognized as Azure; proceeding without bearer token"
         );
-        management_scope.to_string()
-    };
-    let token = acquire_azure_token_for_scope(server_name, &scope).await?;
-
-    Ok(Some(token))
+        Ok(None)
+    }
 }
 
 #[cfg(not(test))]

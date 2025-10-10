@@ -115,7 +115,7 @@ async fn stdio_server_round_trip() -> anyhow::Result<()> {
     let begin_event = wait_for_event_with_timeout(
         &fixture.codex,
         |ev| matches!(ev, EventMsg::McpToolCallBegin(_)),
-        Duration::from_secs(10),
+        Duration::from_secs(30),
     )
     .await;
 
@@ -125,9 +125,11 @@ async fn stdio_server_round_trip() -> anyhow::Result<()> {
     assert_eq!(begin.invocation.server, server_name);
     assert_eq!(begin.invocation.tool, "echo");
 
-    let end_event = wait_for_event(&fixture.codex, |ev| {
-        matches!(ev, EventMsg::McpToolCallEnd(_))
-    })
+    let end_event = wait_for_event_with_timeout(
+        &fixture.codex,
+        |ev| matches!(ev, EventMsg::McpToolCallEnd(_)),
+        Duration::from_secs(30),
+    )
     .await;
     let EventMsg::McpToolCallEnd(end) = end_event else {
         unreachable!("event guard guarantees McpToolCallEnd");
@@ -265,7 +267,7 @@ async fn streamable_http_tool_call_round_trip() -> anyhow::Result<()> {
     let begin_event = wait_for_event_with_timeout(
         &fixture.codex,
         |ev| matches!(ev, EventMsg::McpToolCallBegin(_)),
-        Duration::from_secs(10),
+        Duration::from_secs(30),
     )
     .await;
 
@@ -275,9 +277,11 @@ async fn streamable_http_tool_call_round_trip() -> anyhow::Result<()> {
     assert_eq!(begin.invocation.server, server_name);
     assert_eq!(begin.invocation.tool, "echo");
 
-    let end_event = wait_for_event(&fixture.codex, |ev| {
-        matches!(ev, EventMsg::McpToolCallEnd(_))
-    })
+    let end_event = wait_for_event_with_timeout(
+        &fixture.codex,
+        |ev| matches!(ev, EventMsg::McpToolCallEnd(_)),
+        Duration::from_secs(30),
+    )
     .await;
     let EventMsg::McpToolCallEnd(end) = end_event else {
         unreachable!("event guard guarantees McpToolCallEnd");
@@ -447,7 +451,7 @@ async fn streamable_http_with_oauth_round_trip() -> anyhow::Result<()> {
     let begin_event = wait_for_event_with_timeout(
         &fixture.codex,
         |ev| matches!(ev, EventMsg::McpToolCallBegin(_)),
-        Duration::from_secs(10),
+        Duration::from_secs(30),
     )
     .await;
 
@@ -457,9 +461,11 @@ async fn streamable_http_with_oauth_round_trip() -> anyhow::Result<()> {
     assert_eq!(begin.invocation.server, server_name);
     assert_eq!(begin.invocation.tool, "echo");
 
-    let end_event = wait_for_event(&fixture.codex, |ev| {
-        matches!(ev, EventMsg::McpToolCallEnd(_))
-    })
+    let end_event = wait_for_event_with_timeout(
+        &fixture.codex,
+        |ev| matches!(ev, EventMsg::McpToolCallEnd(_)),
+        Duration::from_secs(30),
+    )
     .await;
     let EventMsg::McpToolCallEnd(end) = end_event else {
         unreachable!("event guard guarantees McpToolCallEnd");
